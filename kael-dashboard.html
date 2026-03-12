@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kael Signal Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #010409; --bg2: #0d1117; --bg3: #161b22;
+    --border: #21262d; --border2: #30363d;
+    --text: #c9d1d9; --text-dim: #8b949e; --text-dimmer: #484f58;
+    --accent: #58a6ff; --green: #4ade80; --red: #f87171;
+    --font: 'JetBrains Mono', 'Fira Mono', monospace;
+  }
+  body { background: var(--bg); color: var(--text); font-family: var(--font); min-height: 100vh; padding: 24px 16px; }
+  .container { max-width: 560px; margin: 0 auto; }
+
+  .header-label { font-size: 11px; color: var(--accent); letter-spacing: 3px; margin-bottom: 4px; }
+  .header-title { font-size: 20px; font-weight: 700; color: #f0f6fc; letter-spacing: 1px; }
+  .header-top { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 4px; }
+  .header-meta .date { font-size: 10px; color: var(--text-dim); text-align: right; }
+  .header-meta .time { font-size: 11px; color: var(--accent); text-align: right; }
+  .divider { height: 1px; background: linear-gradient(90deg, #58a6ff44, #58a6ff11, transparent); margin-bottom: 20px; }
+
+  .status-bar { display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 6px; background: var(--bg2); border: 1px solid var(--border); margin-bottom: 16px; font-size: 11px; }
+  .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-dimmer); transition: background 0.3s; }
+  .status-dot.live { background: var(--green); box-shadow: 0 0 6px var(--green); animation: pulse 2s infinite; }
+  .status-dot.error { background: var(--red); }
+  @keyframes pulse { 0%,100%{opacity:1}50%{opacity:0.4} }
+  .status-text { color: var(--text-dim); }
+  .status-refresh { margin-left: auto; color: var(--text-dimmer); font-size: 10px; cursor: pointer; }
+  .status-refresh:hover { color: var(--accent); }
+
+  .tabs { display: flex; gap: 4px; margin-bottom: 16px; }
+  .tab { padding: 6px 14px; border-radius: 6px; font-size: 11px; font-family: var(--font); border: 1px solid var(--border); background: transparent; color: var(--text-dim); cursor: pointer; transition: all 0.15s; letter-spacing: 1px; }
+  .tab.active { background: #1f3148; border-color: var(--accent); color: var(--accent); }
+  .tab:hover:not(.active) { border-color: var(--border2); color: var(--text); }
+
+  .section-label { font-size: 10px; color: var(--text-dim); letter-spacing: 1px; margin-bottom: 10px; margin-top: 16px; }
+  .section-label:first-child { margin-top: 0; }
+
+  .pairs-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+  .pair-row { display: grid; grid-template-columns: 24px 1fr auto auto; gap: 12px; align-items: center; padding: 10px 14px; border-radius: 8px; background: var(--bg2); border: 1px solid var(--border); cursor: pointer; transition: all 0.15s; }
+  .pair-row:hover { background: var(--bg3); border-color: var(--border2); }
+  .pair-row.watchlisted { border-color: #58a6ff33; }
+  .pair-rank { color: var(--text-dimmer); font-size: 12px; font-weight: 600; }
+  .pair-name { color: #f0f6fc; font-size: 14px; font-weight: 600; letter-spacing: 1px; }
+  .pair-pct { font-size: 13px; font-weight: 700; }
+  .pair-dir { font-size: 10px; padding: 2px 8px; border-radius: 4px; font-weight: 700; letter-spacing: 1px; }
+  .long { color: var(--green); }
+  .long-bg { background: #4ade8015; color: var(--green); border: 1px solid #4ade8030; }
+  .short { color: var(--red); }
+  .short-bg { background: #f8717115; color: var(--red); border: 1px solid #f8717130; }
+
+  /* Category badge */
+  .cat-badge { font-size: 9px; padding: 1px 5px; border-radius: 3px; letter-spacing: 1px; background: var(--bg3); color: var(--text-dimmer); border: 1px solid var(--border); }
+
+  .search-box { width: 100%; padding: 8px 14px; border-radius: 6px; background: var(--bg2); border: 1px solid var(--border); color: var(--text); font-family: var(--font); font-size: 12px; margin-bottom: 12px; outline: none; transition: border 0.15s; }
+  .search-box:focus { border-color: var(--accent); }
+  .search-box::placeholder { color: var(--text-dimmer); }
+
+  .all-pair-row { display: grid; grid-template-columns: auto 1fr auto auto auto; gap: 10px; align-items: center; padding: 8px 14px; border-radius: 8px; background: var(--bg2); border: 1px solid var(--border); cursor: pointer; transition: all 0.15s; margin-bottom: 6px; }
+  .all-pair-row:hover { background: var(--bg3); border-color: var(--border2); }
+  .watch-btn { background: none; border: 1px solid var(--border); color: var(--text-dimmer); font-family: var(--font); font-size: 10px; padding: 2px 8px; border-radius: 4px; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+  .watch-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .watch-btn.watching { border-color: var(--accent); color: var(--accent); background: #58a6ff15; }
+
+  .context-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-bottom: 16px; }
+  .context-card { padding: 8px 12px; border-radius: 6px; background: var(--bg2); border: 1px solid var(--border); }
+  .context-label { font-size: 9px; color: var(--text-dimmer); letter-spacing: 1px; margin-bottom: 2px; }
+  .context-val { font-size: 13px; font-weight: 600; }
+
+  .rule-box { padding: 10px 14px; border-radius: 6px; background: var(--bg2); border: 1px solid var(--border); font-size: 10px; color: var(--text-dimmer); line-height: 1.6; margin-top: 16px; }
+
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.85); display: none; align-items: center; justify-content: center; z-index: 100; backdrop-filter: blur(6px); }
+  .modal-overlay.open { display: flex; }
+  .modal { background: var(--bg); border-radius: 12px; padding: 28px; width: 420px; max-width: 95vw; max-height: 90vh; overflow-y: auto; }
+  .modal-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; }
+  .modal-pair-name { font-size: 22px; font-weight: 700; color: #f0f6fc; letter-spacing: 2px; }
+  .modal-close { background: none; border: 1px solid var(--border2); color: var(--text-dim); cursor: pointer; border-radius: 6px; padding: 4px 10px; font-size: 14px; font-family: var(--font); }
+  .modal-close:hover { border-color: var(--accent); color: var(--accent); }
+  .chart-label { font-size: 11px; color: var(--text-dim); margin-bottom: 8px; letter-spacing: 1px; }
+  .history-label { font-size: 11px; color: var(--text-dim); margin-bottom: 10px; letter-spacing: 1px; border-top: 1px solid var(--border); padding-top: 16px; }
+  .history-item { display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; border-radius: 6px; margin-bottom: 4px; border: 1px solid transparent; }
+  .history-item.latest { background: var(--bg3); border-color: var(--border); }
+  .history-time { color: var(--text-dim); font-size: 12px; }
+  .history-rank { color: var(--text-dim); font-size: 12px; }
+  .history-pct { font-size: 13px; font-weight: 600; }
+  .history-dir { font-size: 10px; padding: 1px 6px; border-radius: 3px; }
+
+  .empty-state { padding: 20px; text-align: center; color: var(--text-dimmer); font-size: 12px; }
+
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div style="margin-bottom:20px">
+    <div class="header-top">
+      <div>
+        <div class="header-label">KAEL SIGNAL SYSTEM</div>
+        <div class="header-title">SCALPING MONITOR</div>
+      </div>
+      <div class="header-meta">
+        <div class="date" id="header-date">—</div>
+        <div class="time" id="header-time">—</div>
+      </div>
+    </div>
+    <div class="divider"></div>
+  </div>
+
+  <div class="status-bar">
+    <div class="status-dot" id="status-dot"></div>
+    <span class="status-text" id="status-text">Connecting...</span>
+    <span class="status-refresh" onclick="fetchData()">↻ Refresh</span>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('top5')">TOP 5</button>
+    <button class="tab" onclick="switchTab('watchlist')">WATCHLIST ★</button>
+    <button class="tab" onclick="switchTab('all')">SEMUA</button>
+  </div>
+
+  <!-- TAB: TOP 5 -->
+  <div id="tab-top5">
+    <div class="section-label">TOP 5 FOREX</div>
+    <div class="pairs-list" id="top5-forex"><div class="empty-state">Menunggu data...</div></div>
+
+    <div class="section-label">METALS</div>
+    <div class="pairs-list" id="top5-metals"></div>
+
+    <div class="section-label">CRYPTO</div>
+    <div class="pairs-list" id="top5-crypto"></div>
+
+    <div class="section-label">MARKET CONTEXT</div>
+    <div class="context-grid" id="context-grid"></div>
+
+    <div class="rule-box">
+      SIGNAL VALID: X:05 — X:30 &nbsp;·&nbsp; SKIP JIKA LEWAT X:30 &nbsp;·&nbsp; MIN 4 PAIR SEARAH &nbsp;·&nbsp; SEMUA ≥ 0.10%
+    </div>
+  </div>
+
+  <!-- TAB: WATCHLIST -->
+  <div id="tab-watchlist" style="display:none">
+    <div class="section-label">PAIR YANG KAMU PANTAU</div>
+    <div id="watchlist-list"><div class="empty-state">Belum ada watchlist — tambah dari tab SEMUA</div></div>
+  </div>
+
+  <!-- TAB: SEMUA -->
+  <div id="tab-all" style="display:none">
+    <input type="text" class="search-box" placeholder="Cari pair... (contoh: AUD, JPY, GOLD, BTC)" oninput="filterPairs(this.value)">
+
+    <div class="section-label">FOREX</div>
+    <div id="all-forex"></div>
+
+    <div class="section-label">METALS</div>
+    <div id="all-metals"></div>
+
+    <div class="section-label">CRYPTO</div>
+    <div id="all-crypto"></div>
+  </div>
+
+</div>
+
+<!-- Modal -->
+<div class="modal-overlay" id="modal" onclick="closeModal(event)">
+  <div class="modal" id="modal-inner">
+    <div class="modal-header">
+      <div>
+        <div class="modal-pair-name" id="modal-pair-name">—</div>
+        <div style="display:flex;gap:6px;margin-top:6px;align-items:center">
+          <div id="modal-pair-badge"></div>
+          <div id="modal-pair-cat" style="font-size:9px;padding:1px 6px;border-radius:3px;background:#161b22;color:#484f58;border:1px solid #21262d;letter-spacing:1px"></div>
+        </div>
+      </div>
+      <button class="modal-close" onclick="closeModalDirect()">✕</button>
+    </div>
+    <div class="chart-label">MOMENTUM HISTORY</div>
+    <svg id="modal-chart" width="100%" height="60" viewBox="0 0 360 60" preserveAspectRatio="none" style="margin-bottom:20px"></svg>
+    <div class="history-label">RIWAYAT KEMUNCULAN</div>
+    <div id="modal-history"></div>
+  </div>
+</div>
+
+<script>
+const WORKER_URL = "https://flowmonitor.aideelyst.workers.dev";
+
+let latestData = null;
+let historyData = [];
+let watchlist = JSON.parse(localStorage.getItem("kael_watchlist") || "[]");
+let searchQuery = "";
+
+// ── FETCH ──
+async function fetchData() {
+  setStatus("loading");
+  try {
+    const [latestRes, historyRes] = await Promise.all([
+      fetch(WORKER_URL + "/latest"),
+      fetch(WORKER_URL + "/history")
+    ]);
+    latestData = await latestRes.json();
+    historyData = await historyRes.json();
+    if (latestData.error) { setStatus("error", "Belum ada data — tunggu candle berikutnya"); return; }
+    renderAll();
+    setStatus("live", "Live · auto refresh tiap 5 menit");
+  } catch(e) {
+    setStatus("error", "Gagal connect — cek URL Worker");
+  }
+}
+
+// ── HELPERS ──
+function pairRow(item, rank, showWatch = false, category = "") {
+  const isLong = item.dir === "LONG";
+  const inWatch = watchlist.includes(item.pair);
+  const pct = parseFloat(item.pct);
+  const watchCol = showWatch
+    ? `<button class="watch-btn ${inWatch ? 'watching' : ''}" onclick="event.stopPropagation();toggleWatch('${item.pair}')">${inWatch ? '★' : '☆'}</button>`
+    : "";
+  const catCol = category ? `<span class="cat-badge">${category}</span>` : "";
+  return `<div class="${showWatch ? 'all-pair-row' : 'pair-row'} ${inWatch ? 'watchlisted' : ''}" onclick="openModal('${item.pair}','${category}')">
+    ${showWatch ? catCol : `<span class="pair-rank">${rank ? '#'+rank : '—'}</span>`}
+    <span class="pair-name" style="font-size:${showWatch?'13px':'14px'}">${item.pair}</span>
+    <span class="pair-pct ${isLong?'long':'short'}">${pct>=0?'+':''}${pct.toFixed(2)}%</span>
+    <span class="pair-dir ${isLong?'long-bg':'short-bg'}">${item.dir}</span>
+    ${showWatch ? watchCol : ""}
+  </div>`;
+}
+
+// ── RENDER ALL ──
+function renderAll() {
+  if (!latestData) return;
+  const d = latestData;
+  document.getElementById("header-date").textContent = d.time?.split("|")[0].trim() || "—";
+  document.getElementById("header-time").textContent = d.time?.split("|")[1]?.trim() || "—";
+
+  // TOP 5 tab
+  const top5forex = (d.forex || []).slice(0, 5);
+  document.getElementById("top5-forex").innerHTML = top5forex.map((item, i) => pairRow(item, i+1, false, "FOREX")).join('') || '<div class="empty-state">Tidak ada data</div>';
+  document.getElementById("top5-metals").innerHTML = (d.metals || []).map((item, i) => pairRow(item, i+1, false, "METALS")).join('');
+  document.getElementById("top5-crypto").innerHTML = (d.crypto || []).map((item, i) => pairRow(item, i+1, false, "CRYPTO")).join('');
+
+  // Context
+  const ctx = d.context;
+  if (ctx) {
+    document.getElementById("context-grid").innerHTML = Object.entries(ctx).map(([key, val]) => {
+      const v = parseFloat(val);
+      return `<div class="context-card"><div class="context-label">${key}</div><div class="context-val ${v>=0?'long':'short'}">${v>=0?'+':''}${v.toFixed(2)}%</div></div>`;
+    }).join('');
+  }
+
+  // ALL tab
+  renderAllPairs(d);
+
+  // WATCHLIST tab
+  renderWatchlist(d);
+}
+
+function renderAllPairs(d) {
+  const q = searchQuery.toUpperCase();
+  const filterFn = item => !q || item.pair.includes(q);
+
+  document.getElementById("all-forex").innerHTML = (d.forex||[]).filter(filterFn).map((item, i) => {
+    const rank = (d.forex||[]).indexOf(item) + 1;
+    return pairRow(item, rank, true, "FOREX");
+  }).join('') || '<div class="empty-state">Tidak ada pair yang cocok</div>';
+
+  document.getElementById("all-metals").innerHTML = (d.metals||[]).filter(filterFn).map((item, i) =>
+    pairRow(item, i+1, true, "METALS")
+  ).join('') || '<div class="empty-state">Tidak ada pair yang cocok</div>';
+
+  document.getElementById("all-crypto").innerHTML = (d.crypto||[]).filter(filterFn).map((item, i) =>
+    pairRow(item, i+1, true, "CRYPTO")
+  ).join('') || '<div class="empty-state">Tidak ada pair yang cocok</div>';
+}
+
+function renderWatchlist(d) {
+  if (!watchlist.length) {
+    document.getElementById("watchlist-list").innerHTML = '<div class="empty-state">Belum ada watchlist — tambah dari tab SEMUA</div>';
+    return;
+  }
+
+  const allItems = [
+    ...(d.forex||[]).map(p => ({...p, cat:"FOREX"})),
+    ...(d.metals||[]).map(p => ({...p, cat:"METALS"})),
+    ...(d.crypto||[]).map(p => ({...p, cat:"CRYPTO"})),
+  ];
+
+  document.getElementById("watchlist-list").innerHTML = watchlist.map(pairName => {
+    const item = allItems.find(p => p.pair === pairName);
+    const cat = item?.cat || "";
+    const catArr = cat === "FOREX" ? (d.forex||[]) : cat === "METALS" ? (d.metals||[]) : (d.crypto||[]);
+    const rank = item ? catArr.indexOf(catArr.find(p => p.pair === pairName)) + 1 : null;
+
+    if (!item) {
+      // pair tidak ada di data sekarang
+      return `<div class="pair-row watchlisted" onclick="openModal('${pairName}','')">
+        <span class="pair-rank">—</span>
+        <span class="pair-name">${pairName}</span>
+        <span class="pair-pct" style="color:var(--text-dimmer)">no data</span>
+        <span class="pair-dir" style="color:var(--text-dimmer)">—</span>
+      </div>`;
+    }
+    return pairRow(item, rank, false, cat);
+  }).join('');
+}
+
+// ── WATCHLIST TOGGLE ──
+function toggleWatch(pair) {
+  watchlist = watchlist.includes(pair) ? watchlist.filter(p => p !== pair) : [...watchlist, pair];
+  localStorage.setItem("kael_watchlist", JSON.stringify(watchlist));
+  renderAll();
+}
+
+// ── SEARCH ──
+function filterPairs(val) {
+  searchQuery = val;
+  if (latestData) renderAllPairs(latestData);
+}
+
+// ── TABS ──
+function switchTab(tab) {
+  ["top5","watchlist","all"].forEach(t => {
+    document.getElementById("tab-"+t).style.display = t === tab ? "block" : "none";
+  });
+  document.querySelectorAll(".tab").forEach((el, i) => {
+    el.classList.toggle("active", ["top5","watchlist","all"][i] === tab);
+  });
+}
+
+// ── MODAL ──
+function openModal(pair, category) {
+  // Cari history untuk pair ini di semua kategori
+  const pairHistory = [];
+  historyData.forEach(snapshot => {
+    const allInSnap = [
+      ...(snapshot.forex||[]).map(p => ({...p, cat:"FOREX"})),
+      ...(snapshot.metals||[]).map(p => ({...p, cat:"METALS"})),
+      ...(snapshot.crypto||[]).map(p => ({...p, cat:"CRYPTO"})),
+    ];
+    const found = allInSnap.find(p => p.pair === pair);
+    if (found) {
+      const catArr = found.cat === "FOREX" ? (snapshot.forex||[]) : found.cat === "METALS" ? (snapshot.metals||[]) : (snapshot.crypto||[]);
+      pairHistory.push({
+        time: snapshot.time,
+        pct: parseFloat(found.pct),
+        dir: found.dir,
+        rank: catArr.indexOf(catArr.find(p => p.pair === pair)) + 1,
+        cat: found.cat
+      });
+    }
+  });
+
+  const latest = pairHistory[pairHistory.length - 1];
+  const isLong = latest?.dir === "LONG";
+  const color = isLong ? "#4ade80" : "#f87171";
+  const cat = latest?.cat || category || "";
+
+  document.getElementById("modal-pair-name").textContent = pair;
+  document.getElementById("modal-pair-cat").textContent = cat;
+  document.getElementById("modal-inner").style.border = `1px solid ${isLong ? "#4ade8044" : "#f8717144"}`;
+
+  const badge = document.getElementById("modal-pair-badge");
+  badge.textContent = latest?.dir || "—";
+  badge.style.cssText = `background:${isLong?"#4ade8022":"#f8717122"};color:${color};border:1px solid ${isLong?"#4ade8044":"#f8717144"};display:inline-block;padding:2px 10px;border-radius:4px;font-size:11px;font-weight:700;letter-spacing:1.5px`;
+
+  drawChart(pairHistory, isLong);
+
+  document.getElementById("modal-history").innerHTML = !pairHistory.length
+    ? '<div class="empty-state">Belum ada history</div>'
+    : [...pairHistory].reverse().map((h, i) => `
+        <div class="history-item ${i===0?'latest':''}">
+          <span class="history-time">${h.time?.split("|")[1]?.trim()||"—"}</span>
+          <span class="history-rank">#${h.rank}</span>
+          <span class="history-pct ${h.dir==='LONG'?'long':'short'}">${h.pct>=0?'+':''}${h.pct.toFixed(2)}%</span>
+          <span class="history-dir ${h.dir==='LONG'?'long-bg':'short-bg'}">${h.dir}</span>
+        </div>`).join('');
+
+  document.getElementById("modal").classList.add("open");
+}
+
+function drawChart(history, isLong) {
+  const svg = document.getElementById("modal-chart");
+  if (history.length < 2) { svg.innerHTML = '<text x="50%" y="50%" fill="#484f58" text-anchor="middle" font-size="11" font-family="JetBrains Mono">Belum cukup data</text>'; return; }
+  const vals = history.map(h => h.pct);
+  const min = Math.min(...vals), max = Math.max(...vals), range = max-min||0.01;
+  const W=360, H=60, pad=6;
+  const toX = i => (i/(vals.length-1))*W;
+  const toY = v => H-pad-((v-min)/range)*(H-pad*2);
+  const color = isLong ? "#4ade80" : "#f87171";
+  const gid = "g"+Date.now();
+  svg.innerHTML = `
+    <defs><linearGradient id="${gid}" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="${color}" stop-opacity="0.2"/>
+      <stop offset="100%" stop-color="${color}" stop-opacity="1"/>
+    </linearGradient></defs>
+    <polyline points="${vals.map((v,i)=>`${toX(i)},${toY(v)}`).join(" ")}" fill="none" stroke="url(#${gid})" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    ${vals.map((v,i)=>`<circle cx="${toX(i)}" cy="${toY(v)}" r="3" fill="${color}" opacity="0.8"/>`).join("")}`;
+}
+
+function closeModal(e) { if (e.target.id==="modal") closeModalDirect(); }
+function closeModalDirect() { document.getElementById("modal").classList.remove("open"); }
+
+function setStatus(state, msg) {
+  const dot = document.getElementById("status-dot");
+  const text = document.getElementById("status-text");
+  dot.className = "status-dot";
+  if (state==="live") { dot.classList.add("live"); text.textContent = msg||"Live"; }
+  else if (state==="error") { dot.classList.add("error"); text.textContent = msg||"Error"; }
+  else { text.textContent = msg||"Loading..."; }
+}
+
+fetchData();
+setInterval(fetchData, 5 * 1000);
+</script>
+</body>
+</html>
