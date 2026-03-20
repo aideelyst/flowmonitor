@@ -3,419 +3,1402 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Kael Signal Dashboard</title>
-<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<title>Flow Monitor · Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
+  /* ── Shared tokens ── */
   :root {
-    --bg: #010409; --bg2: #0d1117; --bg3: #161b22;
-    --border: #21262d; --border2: #30363d;
-    --text: #c9d1d9; --text-dim: #8b949e; --text-dimmer: #484f58;
-    --accent: #58a6ff; --green: #4ade80; --red: #f87171;
-    --font: 'JetBrains Mono', 'Fira Mono', monospace;
+    --font-body: 'Instrument Sans', system-ui, sans-serif;
+    --font-mono: 'DM Mono', 'Menlo', monospace;
+    --r-sm: 8px;
+    --r-md: 12px;
+    --r-lg: 16px;
+    --r-xl: 20px;
+    --accent: #3d8bfd;
+    --accent-dim: rgba(61,139,253,0.10);
+    --accent-mid: rgba(61,139,253,0.22);
+    --accent-glow: rgba(61,139,253,0.35);
+    --gold: #f0b940;
+    --gold-dim: rgba(240,185,64,0.10);
   }
-  body { background: var(--bg); color: var(--text); font-family: var(--font); min-height: 100vh; padding: 24px 16px; }
-  .container { max-width: 560px; margin: 0 auto; }
 
-  .header-label { font-size: 11px; color: var(--accent); letter-spacing: 3px; margin-bottom: 4px; }
-  .header-title { font-size: 20px; font-weight: 700; color: #f0f6fc; letter-spacing: 1px; }
-  .header-top { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 4px; }
-  .header-meta .date { font-size: 10px; color: var(--text-dim); text-align: right; }
-  .header-meta .time { font-size: 11px; color: var(--accent); text-align: right; }
-  .divider { height: 1px; background: linear-gradient(90deg, #58a6ff44, #58a6ff11, transparent); margin-bottom: 20px; }
+  /* ── Dark theme (default) ── */
+  :root, [data-theme="dark"] {
+    --bg-0: #06080d;
+    --bg-1: #0b0f18;
+    --bg-2: #101624;
+    --bg-3: #161e30;
+    --bg-glass: rgba(16,22,36,0.72);
+    --bg-glass-hover: rgba(22,30,48,0.82);
+    --border-0: rgba(255,255,255,0.04);
+    --border-1: rgba(255,255,255,0.07);
+    --border-2: rgba(255,255,255,0.12);
+    --text-0: #f1f5f9;
+    --text-1: #c1cad8;
+    --text-2: #7b8ba4;
+    --text-3: #3e4d65;
+    --bull: #2dd4a8;
+    --bull-dim: rgba(45,212,168,0.08);
+    --bull-mid: rgba(45,212,168,0.18);
+    --bear: #f06060;
+    --bear-dim: rgba(240,96,96,0.08);
+    --bear-mid: rgba(240,96,96,0.18);
+    --shadow-card: 0 1px 3px rgba(0,0,0,0.4), 0 8px 24px rgba(0,0,0,0.25);
+    --shadow-glow: 0 0 40px rgba(61,139,253,0.08);
+    --ambient-1: rgba(61,139,253,0.04);
+    --ambient-2: rgba(45,212,168,0.025);
+    --noise-opacity: 0.025;
+    --logo-shadow: 0 2px 10px rgba(61,139,253,0.25);
+    --logo-shadow-lg: 0 4px 16px rgba(61,139,253,0.3);
+    --skeleton-a: var(--bg-3);
+    --skeleton-b: var(--bg-2);
+  }
 
-  .status-bar { display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 6px; background: var(--bg2); border: 1px solid var(--border); margin-bottom: 16px; font-size: 11px; }
-  .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-dimmer); transition: background 0.3s; }
-  .status-dot.live { background: var(--green); box-shadow: 0 0 6px var(--green); animation: pulse 2s infinite; }
-  .status-dot.error { background: var(--red); }
-  @keyframes pulse { 0%,100%{opacity:1}50%{opacity:0.4} }
-  .status-text { color: var(--text-dim); }
-  .status-refresh { margin-left: auto; color: var(--text-dimmer); font-size: 10px; cursor: pointer; }
-  .status-refresh:hover { color: var(--accent); }
+  /* ── Light theme ── */
+  [data-theme="light"] {
+    --bg-0: #f4f6f9;
+    --bg-1: #eaecf1;
+    --bg-2: #ffffff;
+    --bg-3: #e2e6ed;
+    --bg-glass: rgba(255,255,255,0.72);
+    --bg-glass-hover: rgba(255,255,255,0.85);
+    --border-0: rgba(0,0,0,0.04);
+    --border-1: rgba(0,0,0,0.08);
+    --border-2: rgba(0,0,0,0.14);
+    --text-0: #1a1f2e;
+    --text-1: #3b4459;
+    --text-2: #6b7a94;
+    --text-3: #9aa5b8;
+    --bull: #0fa87e;
+    --bull-dim: rgba(15,168,126,0.08);
+    --bull-mid: rgba(15,168,126,0.18);
+    --bear: #dc4444;
+    --bear-dim: rgba(220,68,68,0.07);
+    --bear-mid: rgba(220,68,68,0.16);
+    --shadow-card: 0 1px 3px rgba(0,0,0,0.06), 0 6px 20px rgba(0,0,0,0.06);
+    --shadow-glow: 0 0 40px rgba(61,139,253,0.04);
+    --ambient-1: rgba(61,139,253,0.03);
+    --ambient-2: rgba(15,168,126,0.02);
+    --noise-opacity: 0.015;
+    --logo-shadow: 0 2px 10px rgba(61,139,253,0.18);
+    --logo-shadow-lg: 0 4px 16px rgba(61,139,253,0.22);
+    --skeleton-a: #e2e6ed;
+    --skeleton-b: #eef0f4;
+  }
 
-  .tabs { display: flex; gap: 4px; margin-bottom: 16px; }
-  .tab { padding: 6px 14px; border-radius: 6px; font-size: 11px; font-family: var(--font); border: 1px solid var(--border); background: transparent; color: var(--text-dim); cursor: pointer; transition: all 0.15s; letter-spacing: 1px; }
-  .tab.active { background: #1f3148; border-color: var(--accent); color: var(--accent); }
-  .tab:hover:not(.active) { border-color: var(--border2); color: var(--text); }
+  /* ── Auto: follow OS preference ── */
+  @media (prefers-color-scheme: light) {
+    [data-theme="auto"] {
+      --bg-0: #f4f6f9;
+      --bg-1: #eaecf1;
+      --bg-2: #ffffff;
+      --bg-3: #e2e6ed;
+      --bg-glass: rgba(255,255,255,0.72);
+      --bg-glass-hover: rgba(255,255,255,0.85);
+      --border-0: rgba(0,0,0,0.04);
+      --border-1: rgba(0,0,0,0.08);
+      --border-2: rgba(0,0,0,0.14);
+      --text-0: #1a1f2e;
+      --text-1: #3b4459;
+      --text-2: #6b7a94;
+      --text-3: #9aa5b8;
+      --bull: #0fa87e;
+      --bull-dim: rgba(15,168,126,0.08);
+      --bull-mid: rgba(15,168,126,0.18);
+      --bear: #dc4444;
+      --bear-dim: rgba(220,68,68,0.07);
+      --bear-mid: rgba(220,68,68,0.16);
+      --shadow-card: 0 1px 3px rgba(0,0,0,0.06), 0 6px 20px rgba(0,0,0,0.06);
+      --shadow-glow: 0 0 40px rgba(61,139,253,0.04);
+      --ambient-1: rgba(61,139,253,0.03);
+      --ambient-2: rgba(15,168,126,0.02);
+      --noise-opacity: 0.015;
+      --logo-shadow: 0 2px 10px rgba(61,139,253,0.18);
+      --logo-shadow-lg: 0 4px 16px rgba(61,139,253,0.22);
+      --skeleton-a: #e2e6ed;
+      --skeleton-b: #eef0f4;
+    }
+  }
 
-  .section-label { font-size: 10px; color: var(--text-dim); letter-spacing: 1px; margin-bottom: 10px; margin-top: 16px; }
-  .section-label:first-child { margin-top: 0; }
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
-  .pairs-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
-  .pair-row { display: grid; grid-template-columns: 24px 1fr auto auto; gap: 12px; align-items: center; padding: 10px 14px; border-radius: 8px; background: var(--bg2); border: 1px solid var(--border); cursor: pointer; transition: all 0.15s; }
-  .pair-row:hover { background: var(--bg3); border-color: var(--border2); }
-  .pair-row.watchlisted { border-color: #58a6ff33; }
-  .pair-rank { color: var(--text-dimmer); font-size: 12px; font-weight: 600; }
-  .pair-name { color: #f0f6fc; font-size: 14px; font-weight: 600; letter-spacing: 1px; }
-  .pair-pct { font-size: 13px; font-weight: 700; }
-  .pair-dir { font-size: 10px; padding: 2px 8px; border-radius: 4px; font-weight: 700; letter-spacing: 1px; }
-  .long { color: var(--green); }
-  .long-bg { background: #4ade8015; color: var(--green); border: 1px solid #4ade8030; }
-  .short { color: var(--red); }
-  .short-bg { background: #f8717115; color: var(--red); border: 1px solid #f8717130; }
+  body {
+    background: var(--bg-0);
+    color: var(--text-0);
+    font-family: var(--font-body);
+    min-height: 100vh;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
 
-  /* Category badge */
-  .cat-badge { font-size: 9px; padding: 1px 5px; border-radius: 3px; letter-spacing: 1px; background: var(--bg3); color: var(--text-dimmer); border: 1px solid var(--border); }
+  /* ── Ambient background ── */
+  body::before {
+    content: '';
+    position: fixed;
+    top: -40%; left: -20%;
+    width: 80%; height: 80%;
+    background: radial-gradient(ellipse, var(--ambient-1) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+  }
+  body::after {
+    content: '';
+    position: fixed;
+    bottom: -30%; right: -10%;
+    width: 60%; height: 70%;
+    background: radial-gradient(ellipse, var(--ambient-2) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+  }
 
-  .search-box { width: 100%; padding: 8px 14px; border-radius: 6px; background: var(--bg2); border: 1px solid var(--border); color: var(--text); font-family: var(--font); font-size: 12px; margin-bottom: 12px; outline: none; transition: border 0.15s; }
-  .search-box:focus { border-color: var(--accent); }
-  .search-box::placeholder { color: var(--text-dimmer); }
+  /* Noise overlay */
+  .noise {
+    position: fixed; inset: 0;
+    background: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.025'/%3E%3C/svg%3E");
+    opacity: var(--noise-opacity, 0.025);
+    pointer-events: none; z-index: 0;
+  }
 
-  .all-pair-row { display: grid; grid-template-columns: auto 1fr auto auto auto; gap: 10px; align-items: center; padding: 8px 14px; border-radius: 8px; background: var(--bg2); border: 1px solid var(--border); cursor: pointer; transition: all 0.15s; margin-bottom: 6px; }
-  .all-pair-row:hover { background: var(--bg3); border-color: var(--border2); }
-  .watch-btn { background: none; border: 1px solid var(--border); color: var(--text-dimmer); font-family: var(--font); font-size: 10px; padding: 2px 8px; border-radius: 4px; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
-  .watch-btn:hover { border-color: var(--accent); color: var(--accent); }
-  .watch-btn.watching { border-color: var(--accent); color: var(--accent); background: #58a6ff15; }
+  .app {
+    position: relative; z-index: 1;
+    max-width: 1440px;
+    margin: 0 auto;
+    padding: 20px 24px;
+  }
 
-  .context-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-bottom: 16px; }
-  .context-card { padding: 8px 12px; border-radius: 6px; background: var(--bg2); border: 1px solid var(--border); }
-  .context-label { font-size: 9px; color: var(--text-dimmer); letter-spacing: 1px; margin-bottom: 2px; }
-  .context-val { font-size: 13px; font-weight: 600; }
+  /* ═══════════════════════════════════════════════════════════
+     LOGIN
+     ═══════════════════════════════════════════════════════════ */
+  .login-wrap {
+    min-height: 100vh;
+    display: flex; align-items: center; justify-content: center;
+    padding: 20px;
+    position: relative; z-index: 1;
+  }
+  .login-backdrop {
+    position: fixed; inset: 0;
+    background:
+      radial-gradient(ellipse 60% 50% at 50% 40%, rgba(61,139,253,0.06) 0%, transparent 100%),
+      radial-gradient(ellipse 40% 40% at 70% 70%, rgba(45,212,168,0.04) 0%, transparent 100%);
+    pointer-events: none;
+  }
+  .login-box {
+    position: relative;
+    background: var(--bg-glass);
+    backdrop-filter: blur(40px) saturate(1.4);
+    -webkit-backdrop-filter: blur(40px) saturate(1.4);
+    border: 1px solid var(--border-1);
+    border-radius: var(--r-xl);
+    padding: 48px 40px;
+    max-width: 420px; width: 100%;
+    box-shadow: var(--shadow-card), var(--shadow-glow);
+    animation: loginEntry 0.7s cubic-bezier(0.16,1,0.3,1) both;
+  }
+  @keyframes loginEntry {
+    from { opacity: 0; transform: translateY(20px) scale(0.97); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  .login-brand {
+    display: flex; align-items: center; justify-content: center; gap: 12px;
+    margin-bottom: 32px;
+  }
+  .login-logomark {
+    width: 44px; height: 44px;
+    background: linear-gradient(135deg, var(--accent), #6c5ce7);
+    border-radius: var(--r-md);
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 500; font-size: 15px; color: #fff;
+    font-family: var(--font-mono);
+    letter-spacing: -0.02em;
+    box-shadow: var(--logo-shadow-lg);
+  }
+  .login-wordmark {
+    font-size: 24px; font-weight: 700;
+    letter-spacing: -0.04em;
+    background: linear-gradient(135deg, var(--text-0) 40%, var(--text-2));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .login-sub {
+    text-align: center;
+    font-size: 13px; color: var(--text-3);
+    margin-bottom: 32px;
+    letter-spacing: 0.01em;
+  }
+  .login-field { position: relative; margin-bottom: 24px; }
+  .login-label {
+    display: block;
+    font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.1em;
+    color: var(--text-3);
+    margin-bottom: 8px;
+  }
+  .login-input {
+    width: 100%;
+    background: var(--bg-0);
+    border: 1px solid var(--border-1);
+    border-radius: var(--r-md);
+    color: var(--text-0);
+    font-family: var(--font-mono);
+    font-size: 14px;
+    padding: 14px 16px;
+    outline: none;
+    text-align: center;
+    letter-spacing: 0.08em;
+    transition: border-color 0.25s, box-shadow 0.25s;
+  }
+  .login-input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-dim);
+  }
+  .login-input.error {
+    border-color: var(--bear);
+    box-shadow: 0 0 0 3px var(--bear-dim);
+    animation: inputShake 0.4s ease;
+  }
+  @keyframes inputShake {
+    0%,100% { transform: translateX(0); }
+    25% { transform: translateX(-6px); }
+    75% { transform: translateX(6px); }
+  }
+  .login-btn {
+    width: 100%;
+    padding: 14px;
+    background: linear-gradient(135deg, var(--accent), #6c5ce7);
+    border: none;
+    border-radius: var(--r-md);
+    color: #fff;
+    font-family: var(--font-body);
+    font-size: 14px; font-weight: 600;
+    cursor: pointer;
+    transition: filter 0.2s, transform 0.1s, box-shadow 0.2s;
+    box-shadow: 0 4px 16px rgba(61,139,253,0.25);
+    letter-spacing: 0.02em;
+  }
+  .login-btn:hover { filter: brightness(1.1); box-shadow: 0 6px 24px rgba(61,139,253,0.35); }
+  .login-btn:active { transform: scale(0.98); }
+  .login-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+  .login-error {
+    text-align: center;
+    font-size: 12px;
+    color: var(--bear);
+    margin-top: 16px;
+    min-height: 18px;
+  }
 
-  .rule-box { padding: 10px 14px; border-radius: 6px; background: var(--bg2); border: 1px solid var(--border); font-size: 10px; color: var(--text-dimmer); line-height: 1.6; margin-top: 16px; }
+  /* ═══════════════════════════════════════════════════════════
+     HEADER
+     ═══════════════════════════════════════════════════════════ */
+  .header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 0 20px;
+    margin-bottom: 20px;
+    border-bottom: 1px solid var(--border-0);
+    flex-wrap: wrap; gap: 12px;
+  }
+  .header-left { display: flex; align-items: center; gap: 12px; }
+  .logomark {
+    width: 34px; height: 34px;
+    background: linear-gradient(135deg, var(--accent), #6c5ce7);
+    border-radius: var(--r-sm);
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 500; font-size: 13px; color: #fff;
+    font-family: var(--font-mono);
+    box-shadow: var(--logo-shadow);
+    flex-shrink: 0;
+  }
+  .header-text h1 {
+    font-size: 17px; font-weight: 700; letter-spacing: -0.03em;
+    line-height: 1.2;
+  }
+  .header-text h1 span { color: var(--text-3); font-weight: 400; }
+  .header-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 12px;
+    background: var(--bg-glass);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--border-1);
+    border-radius: 100px;
+    font-size: 11px;
+    font-family: var(--font-mono);
+    color: var(--text-2);
+    white-space: nowrap;
+  }
+  .live-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--bull);
+    box-shadow: 0 0 8px rgba(45,212,168,0.5);
+    animation: livePulse 2s ease-in-out infinite;
+  }
+  .live-dot.off { background: var(--bear); box-shadow: none; animation: none; }
+  @keyframes livePulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
 
-  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.85); display: none; align-items: center; justify-content: center; z-index: 100; backdrop-filter: blur(6px); }
-  .modal-overlay.open { display: flex; }
-  .modal { background: var(--bg); border-radius: 12px; padding: 28px; width: 420px; max-width: 95vw; max-height: 90vh; overflow-y: auto; }
-  .modal-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; }
-  .modal-pair-name { font-size: 22px; font-weight: 700; color: #f0f6fc; letter-spacing: 2px; }
-  .modal-close { background: none; border: 1px solid var(--border2); color: var(--text-dim); cursor: pointer; border-radius: 6px; padding: 4px 10px; font-size: 14px; font-family: var(--font); }
-  .modal-close:hover { border-color: var(--accent); color: var(--accent); }
-  .chart-label { font-size: 11px; color: var(--text-dim); margin-bottom: 8px; letter-spacing: 1px; }
-  .history-label { font-size: 11px; color: var(--text-dim); margin-bottom: 10px; letter-spacing: 1px; border-top: 1px solid var(--border); padding-top: 16px; }
-  .history-item { display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; border-radius: 6px; margin-bottom: 4px; border: 1px solid transparent; }
-  .history-item.latest { background: var(--bg3); border-color: var(--border); }
-  .history-time { color: var(--text-dim); font-size: 12px; }
-  .history-rank { color: var(--text-dim); font-size: 12px; }
-  .history-pct { font-size: 13px; font-weight: 600; }
-  .history-dir { font-size: 10px; padding: 1px 6px; border-radius: 3px; }
+  .pill {
+    padding: 5px 12px;
+    background: transparent;
+    border: 1px solid var(--border-1);
+    border-radius: 100px;
+    color: var(--text-2);
+    font-family: var(--font-body);
+    font-size: 11px; font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+  .pill:hover { border-color: var(--border-2); color: var(--text-1); background: var(--bg-3); }
+  .pill.active { background: var(--accent-dim); border-color: rgba(61,139,253,0.3); color: var(--accent); }
+  .pill-danger:hover { border-color: rgba(240,96,96,0.3); color: var(--bear); }
 
-  .empty-state { padding: 20px; text-align: center; color: var(--text-dimmer); font-size: 12px; }
+  /* ═══════════════════════════════════════════════════════════
+     SUMMARY BAR
+     ═══════════════════════════════════════════════════════════ */
+  .summary-bar {
+    display: flex; gap: 12px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
+  .summary-card {
+    flex: 1; min-width: 150px;
+    background: var(--bg-glass);
+    backdrop-filter: blur(16px);
+    border: 1px solid var(--border-0);
+    border-radius: var(--r-md);
+    padding: 14px 18px;
+    display: flex; flex-direction: column; gap: 4px;
+    transition: border-color 0.2s;
+  }
+  .summary-card:hover { border-color: var(--border-1); }
+  .summary-label {
+    font-size: 10px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.1em;
+    color: var(--text-3);
+  }
+  .summary-value {
+    font-family: var(--font-mono);
+    font-size: 20px; font-weight: 500;
+    letter-spacing: -0.02em;
+  }
+  .summary-sub {
+    font-size: 11px; color: var(--text-3);
+    font-family: var(--font-mono);
+  }
 
-  ::-webkit-scrollbar { width: 4px; }
-  ::-webkit-scrollbar-track { background: var(--bg); }
-  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+  /* ═══════════════════════════════════════════════════════════
+     CONTROLS
+     ═══════════════════════════════════════════════════════════ */
+  .controls {
+    display: flex; align-items: center; gap: 8px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
+  .ctrl-label {
+    font-size: 10px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.1em;
+    color: var(--text-3);
+    margin-right: 2px;
+  }
+  .ctrl-select {
+    background: var(--bg-2);
+    border: 1px solid var(--border-1);
+    border-radius: var(--r-sm);
+    color: var(--text-1);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 5px 8px;
+    outline: none; cursor: pointer;
+    transition: border-color 0.2s;
+  }
+  .ctrl-select:focus { border-color: var(--accent); }
+  .ctrl-spacer { flex: 1; }
+
+  /* ═══════════════════════════════════════════════════════════
+     GRID
+     ═══════════════════════════════════════════════════════════ */
+  .grid { display: grid; grid-template-columns: 1fr 360px; gap: 20px; }
+  @media (max-width: 960px) { .grid { grid-template-columns: 1fr; } }
+
+  /* ═══════════════════════════════════════════════════════════
+     CARD
+     ═══════════════════════════════════════════════════════════ */
+  .card {
+    background: var(--bg-glass);
+    backdrop-filter: blur(20px) saturate(1.3);
+    -webkit-backdrop-filter: blur(20px) saturate(1.3);
+    border: 1px solid var(--border-0);
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow-card);
+    overflow: hidden;
+  }
+  .card-head {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border-0);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .card-title {
+    font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--text-2);
+  }
+  .card-meta {
+    font-family: var(--font-mono); font-size: 11px; color: var(--text-3);
+  }
+  .card-foot {
+    padding: 12px 20px;
+    border-top: 1px solid var(--border-0);
+    font-family: var(--font-mono); font-size: 11px; color: var(--text-3);
+    display: flex; align-items: center; gap: 8px;
+  }
+
+  /* ═══════════════════════════════════════════════════════════
+     TABLE
+     ═══════════════════════════════════════════════════════════ */
+  .fm-table { width: 100%; border-collapse: collapse; }
+  .fm-table th {
+    padding: 10px 20px;
+    text-align: left;
+    font-size: 9px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.12em;
+    color: var(--text-3);
+    border-bottom: 1px solid var(--border-0);
+    cursor: pointer; user-select: none;
+    transition: color 0.2s;
+    white-space: nowrap;
+    position: sticky; top: 0; background: var(--bg-2); z-index: 2;
+  }
+  .fm-table th:hover { color: var(--text-2); }
+  .fm-table th.sorted { color: var(--accent); }
+  .fm-table th .arr { margin-left: 4px; font-size: 8px; opacity: 0.8; }
+  .fm-table td {
+    padding: 0 20px;
+    height: 48px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    border-bottom: 1px solid var(--border-0);
+    white-space: nowrap;
+    vertical-align: middle;
+  }
+  .fm-table tr { transition: background 0.15s; }
+  .fm-table tbody tr:hover { background: rgba(255,255,255,0.02); }
+  .fm-table tr:last-child td { border-bottom: none; }
+
+  /* Pair cell */
+  .pair-cell { display: flex; align-items: center; gap: 10px; }
+  .fav-btn {
+    background: none; border: none; cursor: pointer;
+    font-size: 13px; line-height: 1; padding: 2px;
+    color: var(--text-3); transition: all 0.15s;
+    opacity: 0.4;
+  }
+  .fav-btn:hover { color: var(--gold); opacity: 1; }
+  .fav-btn.is-fav { color: var(--gold); opacity: 1; }
+  .pair-label { font-weight: 500; color: var(--text-0); letter-spacing: 0.02em; }
+
+  /* Rank */
+  .rank-chip {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 26px; height: 26px; border-radius: var(--r-sm);
+    font-size: 11px; font-weight: 500;
+    font-family: var(--font-mono);
+  }
+  .rank-1 { background: linear-gradient(135deg, rgba(240,185,64,0.15), rgba(240,185,64,0.05)); color: var(--gold); }
+  .rank-2 { background: rgba(193,202,216,0.08); color: var(--text-2); }
+  .rank-3 { background: rgba(180,130,90,0.10); color: #c4956a; }
+  .rank-n { background: var(--bg-3); color: var(--text-3); }
+
+  /* ROC value */
+  .roc { font-weight: 500; display: inline-block; letter-spacing: 0.01em; }
+  .roc.bull { color: var(--bull); }
+  .roc.bear { color: var(--bear); }
+  .roc.flash-up { animation: fUp 0.6s ease-out; }
+  .roc.flash-dn { animation: fDn 0.6s ease-out; }
+  @keyframes fUp {
+    0% { color: #4ade80; text-shadow: 0 0 10px rgba(74,222,128,0.5); }
+    100% { text-shadow: none; }
+  }
+  @keyframes fDn {
+    0% { color: #fb923c; text-shadow: 0 0 10px rgba(251,146,60,0.5); }
+    100% { text-shadow: none; }
+  }
+
+  /* Direction chip */
+  .dir-chip {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 24px; height: 24px; border-radius: 6px;
+    font-size: 10px;
+  }
+  .dir-chip.bull { background: var(--bull-dim); color: var(--bull); }
+  .dir-chip.bear { background: var(--bear-dim); color: var(--bear); }
+
+  /* Sparkline */
+  .spark-wrap { width: 64px; height: 28px; display: inline-block; vertical-align: middle; }
+  .spark-wrap svg { display: block; }
+
+  /* Streak in table */
+  .streak-val { font-family: var(--font-mono); font-size: 12px; }
+  .streak-hot { color: var(--gold); font-weight: 600; }
+  .streak-cold { color: var(--text-3); }
+
+  /* ═══════════════════════════════════════════════════════════
+     STREAKS SIDEBAR
+     ═══════════════════════════════════════════════════════════ */
+  .sk-row {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 20px;
+    border-bottom: 1px solid var(--border-0);
+    transition: background 0.15s;
+  }
+  .sk-row:hover { background: rgba(255,255,255,0.015); }
+  .sk-row:last-child { border-bottom: none; }
+  .sk-pair {
+    font-family: var(--font-mono); font-size: 12px; font-weight: 500;
+    width: 72px; flex-shrink: 0;
+  }
+  .sk-bar-bg {
+    flex: 1; height: 6px;
+    background: var(--bg-0);
+    border-radius: 3px; overflow: hidden;
+  }
+  .sk-bar {
+    height: 100%; border-radius: 3px;
+    transition: width 0.8s cubic-bezier(0.22,1,0.36,1);
+  }
+  .sk-bar.bull { background: linear-gradient(90deg, var(--bull-dim), var(--bull-mid), var(--bull)); }
+  .sk-bar.bear { background: linear-gradient(90deg, var(--bear-dim), var(--bear-mid), var(--bear)); }
+  .sk-count {
+    font-family: var(--font-mono); font-size: 11px; font-weight: 600;
+    width: 36px; text-align: right; flex-shrink: 0;
+  }
+
+  /* ═══════════════════════════════════════════════════════════
+     ALERTS TIMELINE
+     ═══════════════════════════════════════════════════════════ */
+  .tl-scroll { max-height: 340px; overflow-y: auto; }
+  .tl-scroll::-webkit-scrollbar { width: 3px; }
+  .tl-scroll::-webkit-scrollbar-thumb { background: var(--border-1); border-radius: 2px; }
+  .tl-row {
+    display: flex; align-items: flex-start; gap: 12px;
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border-0);
+  }
+  .tl-row:last-child { border-bottom: none; }
+  .tl-row.new { animation: tlSlide 0.35s ease-out; }
+  @keyframes tlSlide {
+    from { opacity: 0; transform: translateY(-8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .tl-ts {
+    font-family: var(--font-mono); font-size: 10px;
+    color: var(--text-3); width: 48px; flex-shrink: 0; padding-top: 3px;
+  }
+  .tl-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    margin-top: 5px; flex-shrink: 0;
+  }
+  .tl-dot.bull { background: var(--bull); box-shadow: 0 0 8px rgba(45,212,168,0.4); }
+  .tl-dot.bear { background: var(--bear); box-shadow: 0 0 8px rgba(240,96,96,0.4); }
+  .tl-body { flex: 1; }
+  .tl-pair { font-family: var(--font-mono); font-size: 13px; font-weight: 500; }
+  .tl-detail { font-size: 11px; color: var(--text-3); margin-top: 2px; }
+
+  /* ═══════════════════════════════════════════════════════════
+     EMPTY / SKELETON
+     ═══════════════════════════════════════════════════════════ */
+  .empty {
+    padding: 48px 20px; text-align: center;
+    color: var(--text-3); font-size: 13px;
+  }
+  .empty-icon { font-size: 28px; margin-bottom: 10px; opacity: 0.35; }
+
+  .skeleton-row {
+    display: flex; align-items: center; gap: 16px;
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border-0);
+  }
+  .skeleton-box {
+    border-radius: 4px;
+    background: linear-gradient(90deg, var(--skeleton-a) 25%, var(--skeleton-b) 50%, var(--skeleton-a) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.8s ease-in-out infinite;
+  }
+  @keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+
+  /* ═══════════════════════════════════════════════════════════
+     THEME TOGGLE
+     ═══════════════════════════════════════════════════════════ */
+  .theme-toggle {
+    display: inline-flex; align-items: center;
+    padding: 3px;
+    background: var(--bg-2);
+    border: 1px solid var(--border-1);
+    border-radius: 100px;
+    gap: 0;
+  }
+  .theme-opt {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    border: none; background: transparent;
+    color: var(--text-3);
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s;
+    line-height: 1;
+  }
+  .theme-opt:hover { color: var(--text-1); }
+  .theme-opt.active {
+    background: var(--accent-dim);
+    color: var(--accent);
+    box-shadow: 0 0 8px var(--accent-dim);
+  }
+
+  /* ═══════════════════════════════════════════════════════════
+     TAB BAR
+     ═══════════════════════════════════════════════════════════ */
+  .tab-bar {
+    display: flex; align-items: center; gap: 4px;
+    margin-bottom: 20px;
+    padding: 4px;
+    background: var(--bg-2);
+    border: 1px solid var(--border-0);
+    border-radius: var(--r-md);
+    width: fit-content;
+  }
+  .tab-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 8px 16px;
+    background: transparent;
+    border: none;
+    border-radius: var(--r-sm);
+    color: var(--text-3);
+    font-family: var(--font-body);
+    font-size: 12px; font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+    letter-spacing: 0.01em;
+  }
+  .tab-btn:hover { color: var(--text-1); background: var(--bg-glass-hover); }
+  .tab-btn.active {
+    background: var(--accent-dim);
+    color: var(--accent);
+    box-shadow: 0 1px 4px rgba(61,139,253,0.08);
+  }
+  .tab-icon { font-size: 13px; line-height: 1; }
+  .tab-count {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 18px; height: 18px;
+    padding: 0 5px;
+    border-radius: 9px;
+    font-family: var(--font-mono);
+    font-size: 10px; font-weight: 500;
+    background: var(--border-0);
+    color: var(--text-3);
+    transition: all 0.2s;
+  }
+  .tab-btn.active .tab-count {
+    background: var(--accent-mid);
+    color: var(--accent);
+  }
+  @media (max-width: 640px) {
+    .tab-bar { width: 100%; overflow-x: auto; flex-wrap: nowrap; }
+    .tab-btn { padding: 7px 12px; font-size: 11px; }
+  }
+
+  /* ═══════════════════════════════════════════════════════════
+     ANIMATIONS
+     ═══════════════════════════════════════════════════════════ */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .fin { animation: fadeUp 0.45s cubic-bezier(0.16,1,0.3,1) both; }
+  .fin-1 { animation-delay: 0.04s; }
+  .fin-2 { animation-delay: 0.08s; }
+  .fin-3 { animation-delay: 0.12s; }
+
+  /* ═══════════════════════════════════════════════════════════
+     RESPONSIVE
+     ═══════════════════════════════════════════════════════════ */
+  @media (max-width: 640px) {
+    .app { padding: 12px; }
+    .header h1 { font-size: 15px; }
+    .summary-bar { gap: 8px; }
+    .summary-card { padding: 10px 14px; min-width: 120px; }
+    .summary-value { font-size: 17px; }
+    .fm-table td, .fm-table th { padding-left: 14px; padding-right: 14px; }
+    .spark-wrap { display: none; }
+    .login-box { padding: 32px 24px; }
+  }
 </style>
 </head>
 <body>
-<div class="container">
+<div class="noise"></div>
+<div id="root"></div>
 
-  <div style="margin-bottom:20px">
-    <div class="header-top">
-      <div>
-        <div class="header-label">KAEL SIGNAL SYSTEM</div>
-        <div class="header-title">SCALPING MONITOR</div>
-      </div>
-      <div class="header-meta">
-        <div class="date" id="header-date">—</div>
-        <div class="time" id="header-time">—</div>
-      </div>
-    </div>
-    <div class="divider"></div>
-  </div>
-
-  <div class="status-bar">
-    <div class="status-dot" id="status-dot"></div>
-    <span class="status-text" id="status-text">Connecting...</span>
-    <span class="status-refresh" onclick="fetchData()">↻ Refresh</span>
-  </div>
-
-  <div class="tabs">
-    <button class="tab active" onclick="switchTab('top5')">TOP 5</button>
-    <button class="tab" onclick="switchTab('watchlist')">WATCHLIST ★</button>
-    <button class="tab" onclick="switchTab('all')">SEMUA</button>
-  </div>
-
-  <!-- TAB: TOP 5 -->
-  <div id="tab-top5">
-    <div class="section-label">TOP 5 FOREX</div>
-    <div class="pairs-list" id="top5-forex"><div class="empty-state">Menunggu data...</div></div>
-
-    <div class="section-label">METALS</div>
-    <div class="pairs-list" id="top5-metals"></div>
-
-    <div class="section-label">CRYPTO</div>
-    <div class="pairs-list" id="top5-crypto"></div>
-
-    <div class="section-label">MARKET CONTEXT</div>
-    <div class="context-grid" id="context-grid"></div>
-
-    <div class="rule-box">
-      SIGNAL VALID: X:05 — X:30 &nbsp;·&nbsp; SKIP JIKA LEWAT X:30 &nbsp;·&nbsp; MIN 4 PAIR SEARAH &nbsp;·&nbsp; SEMUA ≥ 0.10%
-    </div>
-  </div>
-
-  <!-- TAB: WATCHLIST -->
-  <div id="tab-watchlist" style="display:none">
-    <div class="section-label">PAIR YANG KAMU PANTAU</div>
-    <div id="watchlist-list"><div class="empty-state">Belum ada watchlist — tambah dari tab SEMUA</div></div>
-  </div>
-
-  <!-- TAB: SEMUA -->
-  <div id="tab-all" style="display:none">
-    <input type="text" class="search-box" placeholder="Cari pair... (contoh: AUD, JPY, GOLD, BTC)" oninput="filterPairs(this.value)">
-
-    <div class="section-label">FOREX</div>
-    <div id="all-forex"></div>
-
-    <div class="section-label">METALS</div>
-    <div id="all-metals"></div>
-
-    <div class="section-label">CRYPTO</div>
-    <div id="all-crypto"></div>
-  </div>
-
-</div>
-
-<!-- Modal -->
-<div class="modal-overlay" id="modal" onclick="closeModal(event)">
-  <div class="modal" id="modal-inner">
-    <div class="modal-header">
-      <div>
-        <div class="modal-pair-name" id="modal-pair-name">—</div>
-        <div style="display:flex;gap:6px;margin-top:6px;align-items:center">
-          <div id="modal-pair-badge"></div>
-          <div id="modal-pair-cat" style="font-size:9px;padding:1px 6px;border-radius:3px;background:#161b22;color:#484f58;border:1px solid #21262d;letter-spacing:1px"></div>
-        </div>
-      </div>
-      <button class="modal-close" onclick="closeModalDirect()">✕</button>
-    </div>
-    <div class="chart-label">MOMENTUM HISTORY</div>
-    <svg id="modal-chart" width="100%" height="60" viewBox="0 0 360 60" preserveAspectRatio="none" style="margin-bottom:20px"></svg>
-    <div class="history-label">RIWAYAT KEMUNCULAN</div>
-    <div id="modal-history"></div>
-  </div>
-</div>
+<script src="https://cdn.ably.com/lib/ably.min-2.js"></script>
 
 <script>
-const WORKER_URL = "https://flowmonitor.aideelyst.workers.dev";
+// ═══════════════════════════════════════════════════════════
+// CONFIG
+// ═══════════════════════════════════════════════════════════
+const API_URL = 'https://fm.aideelyst.workers.dev';
+let ably = null, ablyChannel = null;
 
-let latestData = null;
-let historyData = [];
-let watchlist = JSON.parse(localStorage.getItem("kael_watchlist") || "[]");
-let searchQuery = "";
+// Asset key mapping
+const ASSET_KEYS = ['pairs', 'items', 'coins', 'inst'];
+const TAB_TO_ASSET = { forex: 'pairs', commodities: 'items', crypto: 'coins', indices: 'inst' };
+const ASSET_TO_TAB = { pairs: 'forex', items: 'commodities', coins: 'crypto', inst: 'indices' };
+// Each payload uses its own array key
+const ENTRY_KEY = { pairs: 'pairs', items: 'items', coins: 'coins', inst: 'inst' };
 
-// ── FETCH ──
-async function fetchData() {
-  setStatus("loading");
+// Tab metadata
+const TABS = [
+  { id: 'forex',       asset: 'pairs', label: 'Forex',       icon: '💱' },
+  { id: 'commodities', asset: 'items', label: 'Commodities', icon: '🥇' },
+  { id: 'crypto',      asset: 'coins', label: 'Crypto',      icon: '₿'  },
+  { id: 'indices',     asset: 'inst',  label: 'Indices',     icon: '📊' },
+];
+
+// ═══════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════
+let state = {
+  token: localStorage.getItem('fm_token') || '',
+  loggedIn: false,
+  loginError: '',
+  loginLoading: false,
+  favorites: JSON.parse(localStorage.getItem('fm_favs') || '{}'),
+  showN: parseInt(localStorage.getItem('fm_showN') || '10', 10),
+  sortBy: 'roc',
+  sortAsc: false,
+  filterFav: false,
+  online: false,
+  lastFetch: null,
+  streakTh: parseInt(localStorage.getItem('fm_th') || '5', 10),
+  prevRoc: {},
+  theme: localStorage.getItem('fm_theme') || 'auto',
+  activeTab: localStorage.getItem('fm_tab') || 'forex'
+};
+
+// Per-asset data store
+let assets = {};
+for (const k of ASSET_KEYS) {
+  assets[k] = { entries: [], streaks: {}, history: [], timestamp: null };
+}
+
+// ═══════════════════════════════════════════════════════════
+// HELPERS — Extract entries from raw payload
+// ═══════════════════════════════════════════════════════════
+function extractEntries(raw, assetKey) {
+  if (!raw) return [];
+  let arr = null;
+  // Try the expected key first, then fallback scan (including "indices" alias)
+  const SCAN_KEYS = ['pairs', 'items', 'coins', 'inst', 'indices'];
+  if (raw[assetKey] && Array.isArray(raw[assetKey])) arr = raw[assetKey];
+  else { for (const k of SCAN_KEYS) { if (raw[k] && Array.isArray(raw[k])) { arr = raw[k]; break; } } }
+  if (!arr) return [];
+  // Normalize: ensure every entry has .p (crypto may use .c, indices may use .n)
+  return arr.map(e => {
+    if (e.p) return e;
+    if (e.c) return { p: e.c, r: e.r };
+    if (e.n) return { p: e.n, r: e.r };
+    return e;
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
+// AUTH
+// ═══════════════════════════════════════════════════════════
+async function login() {
+  const input = document.getElementById('token-input');
+  const token = input.value.trim();
+  if (!token) return;
+  state.loginLoading = true; state.loginError = ''; render();
   try {
-    const [latestRes, historyRes] = await Promise.all([
-      fetch(WORKER_URL + "/latest"),
-      fetch(WORKER_URL + "/history")
-    ]);
-    latestData = await latestRes.json();
-    historyData = await historyRes.json();
-    if (latestData.error) { setStatus("error", "Belum ada data — tunggu candle berikutnya"); return; }
-    renderAll();
-    setStatus("live", "Live · auto refresh tiap 5 menit");
-  } catch(e) {
-    setStatus("error", "Gagal connect — cek URL Worker");
+    const res = await fetch(`${API_URL}/verify?token=${encodeURIComponent(token)}`, { cache: 'no-store' });
+    const data = await res.json();
+    if (data.valid) {
+      state.token = token; state.loggedIn = true; state.loginLoading = false;
+      localStorage.setItem('fm_token', token);
+      render(); await fetchData(); await connectRealtime();
+    } else {
+      state.loginError = data.error === 'token expired' ? 'Token expired — contact admin.' : 'Invalid token.';
+      state.loginLoading = false; render();
+      const el = document.getElementById('token-input');
+      if (el) { el.classList.add('error'); setTimeout(() => el.classList.remove('error'), 1200); }
+    }
+  } catch (e) {
+    state.loginError = 'Connection failed. Try again.'; state.loginLoading = false; render();
   }
 }
 
-// ── HELPERS ──
-function pairRow(item, rank, showWatch = false, category = "") {
-  const isLong = item.dir === "LONG";
-  const inWatch = watchlist.includes(item.pair);
-  const pct = parseFloat(item.pct);
-  const watchCol = showWatch
-    ? `<button class="watch-btn ${inWatch ? 'watching' : ''}" onclick="event.stopPropagation();toggleWatch('${item.pair}')">${inWatch ? '★' : '☆'}</button>`
-    : "";
-  const catCol = category ? `<span class="cat-badge">${category}</span>` : "";
-  return `<div class="${showWatch ? 'all-pair-row' : 'pair-row'} ${inWatch ? 'watchlisted' : ''}" onclick="openModal('${item.pair}','${category}')">
-    ${showWatch ? catCol : `<span class="pair-rank">${rank ? '#'+rank : '—'}</span>`}
-    <span class="pair-name" style="font-size:${showWatch?'13px':'14px'}">${item.pair}</span>
-    <span class="pair-pct ${isLong?'long':'short'}">${pct>=0?'+':''}${pct.toFixed(2)}%</span>
-    <span class="pair-dir ${isLong?'long-bg':'short-bg'}">${item.dir}</span>
-    ${showWatch ? watchCol : ""}
-  </div>`;
+function logout() {
+  closeRealtime();
+  Object.assign(state, { token:'', loggedIn:false, online:false, lastFetch:null, prevRoc:{} });
+  for (const k of ASSET_KEYS) assets[k] = { entries: [], streaks: {}, history: [], timestamp: null };
+  localStorage.removeItem('fm_token'); render();
 }
 
-// ── RENDER ALL ──
-function renderAll() {
-  if (!latestData) return;
-  const d = latestData;
-  document.getElementById("header-date").textContent = d.time?.split("|")[0].trim() || "—";
-  document.getElementById("header-time").textContent = d.time?.split("|")[1]?.trim() || "—";
+async function checkToken() {
+  if (!state.token) return;
+  try {
+    const res = await fetch(`${API_URL}/verify?token=${encodeURIComponent(state.token)}`, { cache: 'no-store' });
+    const data = await res.json();
+    if (data.valid) { state.loggedIn = true; render(); await fetchData(); await connectRealtime(); }
+    else { localStorage.removeItem('fm_token'); state.token = ''; render(); }
+  } catch (e) { render(); }
+}
 
-  // TOP 5 tab
-  const top5forex = (d.forex || []).slice(0, 5);
-  document.getElementById("top5-forex").innerHTML = top5forex.map((item, i) => pairRow(item, i+1, false, "FOREX")).join('') || '<div class="empty-state">Tidak ada data</div>';
-  document.getElementById("top5-metals").innerHTML = (d.metals || []).map((item, i) => pairRow(item, i+1, false, "METALS")).join('');
-  document.getElementById("top5-crypto").innerHTML = (d.crypto || []).map((item, i) => pairRow(item, i+1, false, "CRYPTO")).join('');
+// ═══════════════════════════════════════════════════════════
+// ABLY REALTIME
+// ═══════════════════════════════════════════════════════════
+function closeRealtime() {
+  try { if (ablyChannel) { ablyChannel.unsubscribe(); ablyChannel = null; } if (ably) { ably.close(); ably = null; } } catch(e){}
+}
 
-  // Context
-  const ctx = d.context;
-  if (ctx) {
-    document.getElementById("context-grid").innerHTML = Object.entries(ctx).map(([key, val]) => {
-      const v = parseFloat(val);
-      return `<div class="context-card"><div class="context-label">${key}</div><div class="context-val ${v>=0?'long':'short'}">${v>=0?'+':''}${v.toFixed(2)}%</div></div>`;
-    }).join('');
+async function connectRealtime() {
+  if (!state.token || !state.loggedIn || !window.Ably) return;
+  closeRealtime();
+  ably = new Ably.Realtime.Promise({ authUrl: `${API_URL}/ably/token?token=${encodeURIComponent(state.token)}` });
+  const setOnline = v => { state.online = v; updateDashboard(); };
+  ably.connection.on('connected', () => { state.online = true; state.lastFetch = Date.now(); updateDashboard(); });
+  ['connecting','disconnected','suspended','failed'].forEach(e => ably.connection.on(e, () => setOnline(false)));
+  ablyChannel = ably.channels.get('flow-monitor');
+  await ablyChannel.subscribe('snapshot', msg => {
+    let d = msg.data || {};
+    if (typeof d === 'string') { try { d = JSON.parse(d); } catch(e) { console.warn('Ably parse fail', e); return; } }
+    const assetKey = d.asset || 'pairs';
+    const a = assets[assetKey];
+    if (!a) { console.warn('Unknown asset key:', assetKey); return; }
+    console.log(`[FM] Ably snapshot: asset=${assetKey}, entries=${extractEntries(d.latest, assetKey).length}, streaks=${Object.keys(d.streaks||{}).length}`);
+
+    // Save prev ROC for flash animation
+    const prev = {};
+    for (const e of a.entries) prev[e.p] = e.r;
+    Object.assign(state.prevRoc, prev);
+
+    // Update entries
+    if (d.latest) {
+      a.entries = extractEntries(d.latest, assetKey);
+      a.timestamp = d.latest.t || Date.now();
+      // Push to history
+      const lt = a.history.length ? a.history[a.history.length-1]?.t : null;
+      if (!lt || lt !== d.latest.t) { a.history.push(d.latest); if (a.history.length > 50) a.history = a.history.slice(-50); }
+      else a.history[a.history.length-1] = d.latest;
+    }
+    if (d.streaks) a.streaks = d.streaks;
+    state.online = true; state.lastFetch = Date.now(); updateDashboard();
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
+// DATA
+// ═══════════════════════════════════════════════════════════
+async function fetchData() {
+  if (!state.token || !state.loggedIn) return;
+  try {
+    // Fetch all asset classes at once
+    const allRes = await fetch(`${API_URL}/fm/all?token=${encodeURIComponent(state.token)}&t=${Date.now()}`, { cache:'no-store' });
+    if (allRes.status === 401) { logout(); return; }
+    const allData = await allRes.json();
+    console.log('[FM] /fm/all response:', Object.keys(allData).map(k => `${k}: latest=${!!allData[k]?.latest}, streaks=${Object.keys(allData[k]?.streaks||{}).length}`));
+
+    // Populate per-asset caches
+    for (const k of ASSET_KEYS) {
+      if (allData[k]) {
+        const raw = allData[k].latest;
+        const entries = extractEntries(raw, k);
+        assets[k].entries = entries;
+        assets[k].streaks = allData[k].streaks || {};
+        assets[k].timestamp = raw?.t || null;
+        if (entries.length) console.log(`[FM] ${k}: ${entries.length} entries, ${Object.keys(allData[k].streaks||{}).length} streaks`);
+      }
+    }
+
+    // Fetch history per asset (parallel)
+    const histFetches = ASSET_KEYS.map(k =>
+      fetch(`${API_URL}/fm/history?asset=${k}&token=${encodeURIComponent(state.token)}&t=${Date.now()}`, { cache:'no-store' })
+        .then(r => r.status === 200 ? r.json() : [])
+        .catch(() => [])
+    );
+    const histResults = await Promise.all(histFetches);
+    ASSET_KEYS.forEach((k, i) => { assets[k].history = Array.isArray(histResults[i]) ? histResults[i] : []; });
+
+    state.online = true; state.lastFetch = Date.now(); updateDashboard();
+  } catch(e) { state.online = false; updateDashboard(); }
+}
+
+// ═══════════════════════════════════════════════════════════
+// DATA ACCESSORS — use active tab's asset data
+// ═══════════════════════════════════════════════════════════
+function activeAssetKey() { return TAB_TO_ASSET[state.activeTab] || 'pairs'; }
+function activeAsset() { return assets[activeAssetKey()]; }
+
+function tabCounts() {
+  const c = {};
+  for (const t of TABS) c[t.id] = assets[t.asset].entries.length;
+  return c;
+}
+
+function fmtTime(ts) {
+  if (!ts) return '--:--';
+  return new Date(ts).toLocaleTimeString('en-GB', { timeZone:'Asia/Jakarta', hour:'2-digit', minute:'2-digit' });
+}
+function fmtDT(ts) {
+  if (!ts) return '--';
+  return new Date(ts).toLocaleString('en-GB', { timeZone:'Asia/Jakarta', day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit' });
+}
+function ago(ts) {
+  if (!ts) return '';
+  const s = Math.floor((Date.now()-ts)/1000);
+  if (s<60) return s+'s ago';
+  if (s<3600) return Math.floor(s/60)+'m ago';
+  return Math.floor(s/3600)+'h ago';
+}
+function rankCls(r) { return r===1?'rank-1':r===2?'rank-2':r===3?'rank-3':'rank-n'; }
+function sortArrow(col) { return state.sortBy!==col?'':`<span class="arr">${state.sortAsc?'↑':'↓'}</span>`; }
+
+function getSortedPairs() {
+  const ast = activeAsset();
+  if (!ast.entries.length) return [];
+  let p = ast.entries.map((x,i) => ({...x, rank:i+1}));
+  if (state.filterFav) p = p.filter(x => state.favorites[x.p]);
+  const sk = ast.streaks;
+  if (state.sortBy==='name') p.sort((a,b) => state.sortAsc?a.p.localeCompare(b.p):b.p.localeCompare(a.p));
+  else if (state.sortBy==='streak') p.sort((a,b) => { const sa=sk[a.p]||0, sb=sk[b.p]||0; return state.sortAsc?sa-sb:sb-sa; });
+  else p.sort((a,b) => state.sortAsc?Math.abs(a.r)-Math.abs(b.r):Math.abs(b.r)-Math.abs(a.r));
+  return p.slice(0, state.showN);
+}
+
+function getSortedStreaks() {
+  const a = activeAsset();
+  return Object.entries(a.streaks)
+    .map(([pair,count]) => ({pair, count, roc: a.entries.find(e=>e.p===pair)?.r || 0}))
+    .sort((a,b) => b.count-a.count).slice(0,10);
+}
+
+function getAlerts() {
+  const a = activeAsset();
+  const ak = activeAssetKey();
+  const alerts=[], seen={};
+  for (const snap of a.history.slice(-20).reverse()) {
+    const entries = extractEntries(snap, ak);
+    for (const p of entries) {
+      const s = a.streaks[p.p]||0;
+      if (s>=state.streakTh && !seen[p.p]) { alerts.push({pair:p.p,roc:p.r,streak:s,t:snap.t}); seen[p.p]=true; }
+    }
   }
-
-  // ALL tab
-  renderAllPairs(d);
-
-  // WATCHLIST tab
-  renderWatchlist(d);
+  return alerts.slice(0,10);
 }
 
-function renderAllPairs(d) {
-  const q = searchQuery.toUpperCase();
-  const filterFn = item => !q || item.pair.includes(q);
-
-  document.getElementById("all-forex").innerHTML = (d.forex||[]).filter(filterFn).map((item, i) => {
-    const rank = (d.forex||[]).indexOf(item) + 1;
-    return pairRow(item, rank, true, "FOREX");
-  }).join('') || '<div class="empty-state">Tidak ada pair yang cocok</div>';
-
-  document.getElementById("all-metals").innerHTML = (d.metals||[]).filter(filterFn).map((item, i) =>
-    pairRow(item, i+1, true, "METALS")
-  ).join('') || '<div class="empty-state">Tidak ada pair yang cocok</div>';
-
-  document.getElementById("all-crypto").innerHTML = (d.crypto||[]).filter(filterFn).map((item, i) =>
-    pairRow(item, i+1, true, "CRYPTO")
-  ).join('') || '<div class="empty-state">Tidak ada pair yang cocok</div>';
+function flashCls(pair,roc) {
+  const prev=state.prevRoc[pair];
+  if (prev===undefined) return '';
+  if (Math.abs(roc)>Math.abs(prev)+0.01) return 'flash-up';
+  if (Math.abs(roc)<Math.abs(prev)-0.01) return 'flash-dn';
+  return '';
 }
 
-function renderWatchlist(d) {
-  if (!watchlist.length) {
-    document.getElementById("watchlist-list").innerHTML = '<div class="empty-state">Belum ada watchlist — tambah dari tab SEMUA</div>';
+function sparkSVG(pair) {
+  const a = activeAsset();
+  const ak = activeAssetKey();
+  const vals = [];
+  for (const snap of a.history.slice(-12)) {
+    const entries = extractEntries(snap, ak);
+    const found = entries.find(e => e.p === pair);
+    if (found) vals.push(found.r);
+  }
+  if (vals.length < 2) return '';
+  const w=64, h=28, pad=2;
+  const min=Math.min(...vals), max=Math.max(...vals);
+  const range = max-min || 0.01;
+  const pts = vals.map((v,i) => {
+    const x = pad + (i/(vals.length-1)) * (w-pad*2);
+    const y = pad + (1 - (v-min)/range) * (h-pad*2);
+    return `${x},${y}`;
+  });
+  const last = vals[vals.length-1];
+  const col = last >= 0 ? 'var(--bull)' : 'var(--bear)';
+  const lastPt = pts[pts.length-1];
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="sg_${pair.replace(/[^a-zA-Z0-9]/g,'')}" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="${col}" stop-opacity="0.15"/>
+        <stop offset="100%" stop-color="${col}" stop-opacity="0"/>
+      </linearGradient>
+    </defs>
+    <polygon points="${pts.join(' ')} ${w-pad},${h-pad} ${pad},${h-pad}" fill="url(#sg_${pair.replace(/[^a-zA-Z0-9]/g,'')})" />
+    <polyline points="${pts.join(' ')}" stroke="${col}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.8"/>
+    <circle cx="${lastPt.split(',')[0]}" cy="${lastPt.split(',')[1]}" r="2" fill="${col}"/>
+  </svg>`;
+}
+
+function getSummary() {
+  const a = activeAsset();
+  if (!a.entries.length) return null;
+  const entries = a.entries;
+  const bulls = entries.filter(p => p.r > 0).length;
+  const strongest = [...entries].sort((a,b) => Math.abs(b.r)-Math.abs(a.r))[0];
+  const avgMom = entries.reduce((s,p) => s+Math.abs(p.r), 0) / entries.length;
+  const activeStreaks = Object.values(a.streaks).filter(v => v >= state.streakTh).length;
+  return { total: entries.length, bulls, bears: entries.length-bulls, strongest, avgMom, activeStreaks };
+}
+
+// ═══════════════════════════════════════════════════════════
+// RENDER
+// ═══════════════════════════════════════════════════════════
+function render() {
+  const root = document.getElementById('root');
+  if (!state.loggedIn) { root.innerHTML = renderLogin(); syncThemeToggle(); return; }
+  if (!document.getElementById('app-shell')) renderShell();
+  syncThemeToggle();
+  updateDashboard();
+}
+
+function renderLogin() {
+  return `
+    <div class="login-wrap">
+      <div class="login-backdrop"></div>
+      <div class="login-box">
+        <div style="position:absolute;top:16px;right:16px">
+          <div class="theme-toggle" id="login-theme-toggle">
+            <button class="theme-opt" data-theme="light" onclick="setTheme('light')" title="Light">☀</button>
+            <button class="theme-opt" data-theme="auto" onclick="setTheme('auto')" title="System">◐</button>
+            <button class="theme-opt" data-theme="dark" onclick="setTheme('dark')" title="Dark">☾</button>
+          </div>
+        </div>
+        <div class="login-brand">
+          <div class="login-logomark">FM</div>
+          <div class="login-wordmark">Flow Monitor</div>
+        </div>
+        <div class="login-sub">Real-time multi-asset momentum analytics</div>
+        <div class="login-field">
+          <label class="login-label">Access Token</label>
+          <input class="login-input" id="token-input" type="text" placeholder="xxxx-xxxx-xxxx"
+            onkeydown="if(event.key==='Enter')login()"
+            ${state.loginLoading?'disabled':''} autocomplete="off" spellcheck="false">
+        </div>
+        <button class="login-btn" onclick="login()" ${state.loginLoading?'disabled':''}>
+          ${state.loginLoading?'Verifying...':'Connect'}
+        </button>
+        <div class="login-error">${state.loginError}</div>
+      </div>
+    </div>`;
+}
+
+function renderShell() {
+  document.getElementById('root').innerHTML = `
+    <div class="app" id="app-shell">
+      <header class="header">
+        <div class="header-left">
+          <div class="logomark">FM</div>
+          <div class="header-text"><h1>Flow Monitor <span id="header-ctx">· Forex</span></h1></div>
+        </div>
+        <div class="header-right">
+          <div class="badge"><div id="live-dot" class="live-dot off"></div><span id="live-txt">Offline</span></div>
+          <div class="theme-toggle" id="theme-toggle">
+            <button class="theme-opt" data-theme="light" onclick="setTheme('light')" title="Light">☀</button>
+            <button class="theme-opt" data-theme="auto" onclick="setTheme('auto')" title="System">◐</button>
+            <button class="theme-opt" data-theme="dark" onclick="setTheme('dark')" title="Dark">☾</button>
+          </div>
+          <button class="pill" id="fav-pill" onclick="toggleFav()">★ Favorites</button>
+          <button class="pill pill-danger" onclick="logout()">Logout</button>
+        </div>
+      </header>
+
+      <div class="tab-bar" id="tab-bar">
+        ${TABS.map(t => `
+          <button class="tab-btn ${state.activeTab===t.id?'active':''}" data-tab="${t.id}" onclick="setTab('${t.id}')">
+            <span class="tab-icon">${t.icon}</span>
+            ${t.label}
+            <span class="tab-count" id="tc-${t.id}">0</span>
+          </button>
+        `).join('')}
+      </div>
+
+      <div id="summary-bar" class="summary-bar"></div>
+
+      <div class="controls">
+        <span class="ctrl-label">Show</span>
+        <select class="ctrl-select" id="showN" onchange="setShowN(this.value)">
+          ${[5,10,15,20,28].map(n=>`<option value="${n}" ${state.showN===n?'selected':''}>${n===28?'All':'Top '+n}</option>`).join('')}
+        </select>
+        <span class="ctrl-label" style="margin-left:10px">Streak ≥</span>
+        <select class="ctrl-select" id="thSel" onchange="setStreakTh(this.value)">
+          ${[3,4,5,6,8,10].map(n=>`<option value="${n}" ${state.streakTh===n?'selected':''}>${n}</option>`).join('')}
+        </select>
+        <div class="ctrl-spacer"></div>
+        <span class="ctrl-label">Sort</span>
+        <button class="pill" id="s-roc" onclick="setSort('roc')">|ROC|</button>
+        <button class="pill" id="s-name" onclick="setSort('name')">A→Z</button>
+        <button class="pill" id="s-streak" onclick="setSort('streak')">Streak</button>
+      </div>
+
+      <div class="grid">
+        <div>
+          <div class="card">
+            <div class="card-head">
+              <div class="card-title">Momentum Rankings</div>
+              <div class="card-meta" id="pair-ct">—</div>
+            </div>
+            <div id="table-body"></div>
+            <div class="card-foot" id="card-foot">📡 Waiting...</div>
+          </div>
+        </div>
+        <div>
+          <div class="card" style="margin-bottom:16px">
+            <div class="card-head">
+              <div class="card-title">Active Streaks</div>
+              <div class="card-meta" id="th-label">th:${state.streakTh}</div>
+            </div>
+            <div id="streaks-body"></div>
+          </div>
+          <div class="card">
+            <div class="card-head">
+              <div class="card-title">Streak Alerts</div>
+            </div>
+            <div class="tl-scroll" id="alerts-body"></div>
+          </div>
+        </div>
+      </div>
+    </div>`;
+}
+
+// ── Dashboard update ──
+function updateDashboard() {
+  if (!state.loggedIn || !document.getElementById('app-shell')) return;
+  const a = activeAsset();
+  const pairs = getSortedPairs();
+  const streaks = getSortedStreaks();
+  const alerts = getAlerts();
+  const maxSk = Math.max(state.streakTh*2, ...streaks.map(s=>s.count), 1);
+
+  // Header
+  const ld = document.getElementById('live-dot');
+  const lt = document.getElementById('live-txt');
+  if (ld) ld.className = `live-dot ${state.online?'':'off'}`;
+  if (lt) lt.textContent = state.online?'Live':'Offline';
+  const fp = document.getElementById('fav-pill');
+  if (fp) fp.classList.toggle('active', state.filterFav);
+  ['roc','name','streak'].forEach(k => {
+    const b = document.getElementById('s-'+k);
+    if (b) b.classList.toggle('active', state.sortBy===k);
+  });
+  const pc = document.getElementById('pair-ct');
+  if (pc) pc.textContent = a.entries.length ? a.entries.length+' items' : '—';
+  const thl = document.getElementById('th-label');
+  if (thl) thl.textContent = 'th:'+state.streakTh;
+
+  // Tab counts
+  const counts = tabCounts();
+  for (const t of TABS) {
+    const el = document.getElementById('tc-'+t.id);
+    if (el) el.textContent = counts[t.id];
+  }
+  // Header context
+  const ctx = document.getElementById('header-ctx');
+  const meta = TABS.find(t => t.id === state.activeTab);
+  if (ctx && meta) ctx.textContent = '· ' + meta.label;
+
+  // Summary bar
+  renderSummary();
+
+  // Table
+  renderTable(pairs);
+
+  // Streaks
+  renderStreaks(streaks, maxSk);
+
+  // Alerts
+  renderAlerts(alerts);
+
+  // Footer
+  const cf = document.getElementById('card-foot');
+  if (cf) {
+    cf.innerHTML = state.lastFetch
+      ? `📡 ${fmtDT(state.lastFetch)} WIB <span style="margin-left:4px;opacity:0.5">· ${ago(state.lastFetch)}</span>`
+      : '📡 Waiting for data...';
+  }
+}
+
+function renderSummary() {
+  const el = document.getElementById('summary-bar');
+  if (!el) return;
+  const s = getSummary();
+  if (!s) {
+    el.innerHTML = [1,2,3,4].map(() => `
+      <div class="summary-card">
+        <div class="skeleton-box" style="width:60px;height:10px;margin-bottom:8px"></div>
+        <div class="skeleton-box" style="width:48px;height:22px"></div>
+      </div>`).join('');
     return;
   }
+  el.innerHTML = `
+    <div class="summary-card fin fin-1">
+      <div class="summary-label">Items tracked</div>
+      <div class="summary-value">${s.total}</div>
+      <div class="summary-sub" style="color:var(--bull)">${s.bulls} bull</span> · <span style="color:var(--bear)">${s.bears} bear</span></div>
+    </div>
+    <div class="summary-card fin fin-1">
+      <div class="summary-label">Strongest</div>
+      <div class="summary-value" style="color:${s.strongest.r>0?'var(--bull)':'var(--bear)'}">
+        ${s.strongest.r>0?'+':''}${s.strongest.r.toFixed(2)}%
+      </div>
+      <div class="summary-sub">${s.strongest.p}</div>
+    </div>
+    <div class="summary-card fin fin-2">
+      <div class="summary-label">Avg |Momentum|</div>
+      <div class="summary-value">${s.avgMom.toFixed(2)}%</div>
+    </div>
+    <div class="summary-card fin fin-3">
+      <div class="summary-label">Active streaks</div>
+      <div class="summary-value" style="color:${s.activeStreaks?'var(--gold)':'var(--text-3)'}">${s.activeStreaks}</div>
+      <div class="summary-sub">≥ ${state.streakTh} threshold</div>
+    </div>`;
+}
 
-  const allItems = [
-    ...(d.forex||[]).map(p => ({...p, cat:"FOREX"})),
-    ...(d.metals||[]).map(p => ({...p, cat:"METALS"})),
-    ...(d.crypto||[]).map(p => ({...p, cat:"CRYPTO"})),
-  ];
+function renderTable(pairs) {
+  const el = document.getElementById('table-body');
+  if (!el) return;
+  const a = activeAsset();
+  const hasData = a.entries.length > 0;
+  if (!hasData && !state.lastFetch) {
+    el.innerHTML = Array(6).fill(0).map(() => `
+      <div class="skeleton-row">
+        <div class="skeleton-box" style="width:26px;height:26px;border-radius:6px"></div>
+        <div class="skeleton-box" style="width:72px;height:14px;flex-shrink:0"></div>
+        <div style="flex:1"></div>
+        <div class="skeleton-box" style="width:56px;height:14px"></div>
+        <div class="skeleton-box" style="width:64px;height:24px;border-radius:4px"></div>
+        <div class="skeleton-box" style="width:32px;height:14px"></div>
+      </div>`).join('');
+    return;
+  }
+  if (!pairs.length) {
+    const tabMeta = TABS.find(t => t.id === state.activeTab);
+    const tabLabel = tabMeta ? tabMeta.label : state.activeTab;
+    const anyAssetHasData = ASSET_KEYS.some(k => assets[k].entries.length > 0);
+    const emptyMsg = anyAssetHasData
+      ? `No ${tabLabel} data yet — add the ${tabLabel} Pine Script indicator and set up its alert`
+      : 'No data — waiting for Pine Script push';
+    el.innerHTML = `<div class="empty"><div class="empty-icon">${anyAssetHasData ? '🔍' : '📡'}</div>${emptyMsg}</div>`;
+    return;
+  }
+  el.innerHTML = `<table class="fm-table"><thead><tr>
+    <th style="width:38px">#</th>
+    <th onclick="setSort('name')" class="${state.sortBy==='name'?'sorted':''}">Name${sortArrow('name')}</th>
+    <th style="width:72px">Chart</th>
+    <th onclick="setSort('roc')" class="${state.sortBy==='roc'?'sorted':''}" style="text-align:right">ROC %${sortArrow('roc')}</th>
+    <th style="width:36px"></th>
+    <th onclick="setSort('streak')" class="${state.sortBy==='streak'?'sorted':''}" style="text-align:right">Streak${sortArrow('streak')}</th>
+  </tr></thead><tbody>${pairs.map(p => {
+    const bull = p.r>0;
+    const sk = a.streaks[p.p]||0;
+    const isFav = state.favorites[p.p];
+    const hit = sk>=state.streakTh;
+    const fl = flashCls(p.p, p.r);
+    return `<tr>
+      <td><span class="rank-chip ${rankCls(p.rank)}">${p.rank}</span></td>
+      <td><div class="pair-cell">
+        <button class="fav-btn ${isFav?'is-fav':''}" onclick="togglePairFav('${p.p}')">${isFav?'★':'☆'}</button>
+        <span class="pair-label">${p.p}</span>
+      </div></td>
+      <td><div class="spark-wrap">${sparkSVG(p.p)}</div></td>
+      <td style="text-align:right"><span class="roc ${bull?'bull':'bear'} ${fl}">${bull?'+':''}${p.r.toFixed(2)}%</span></td>
+      <td><span class="dir-chip ${bull?'bull':'bear'}">${bull?'▲':'▼'}</span></td>
+      <td style="text-align:right"><span class="streak-val ${hit?'streak-hot':'streak-cold'}">${sk>0?sk+'×':'—'}</span></td>
+    </tr>`;
+  }).join('')}</tbody></table>`;
+}
 
-  document.getElementById("watchlist-list").innerHTML = watchlist.map(pairName => {
-    const item = allItems.find(p => p.pair === pairName);
-    const cat = item?.cat || "";
-    const catArr = cat === "FOREX" ? (d.forex||[]) : cat === "METALS" ? (d.metals||[]) : (d.crypto||[]);
-    const rank = item ? catArr.indexOf(catArr.find(p => p.pair === pairName)) + 1 : null;
-
-    if (!item) {
-      // pair tidak ada di data sekarang
-      return `<div class="pair-row watchlisted" onclick="openModal('${pairName}','')">
-        <span class="pair-rank">—</span>
-        <span class="pair-name">${pairName}</span>
-        <span class="pair-pct" style="color:var(--text-dimmer)">no data</span>
-        <span class="pair-dir" style="color:var(--text-dimmer)">—</span>
-      </div>`;
-    }
-    return pairRow(item, rank, false, cat);
+function renderStreaks(list, max) {
+  const el = document.getElementById('streaks-body');
+  if (!el) return;
+  if (!list.length) { el.innerHTML = `<div class="empty"><div class="empty-icon">⏳</div>No active streaks</div>`; return; }
+  el.innerHTML = list.map(s => {
+    const bull = s.roc>0;
+    const pct = Math.min((s.count/max)*100, 100);
+    const hit = s.count>=state.streakTh;
+    return `<div class="sk-row">
+      <div class="sk-pair" style="color:${bull?'var(--bull)':'var(--bear)'}">${s.pair}</div>
+      <div class="sk-bar-bg"><div class="sk-bar ${bull?'bull':'bear'}" style="width:${pct}%"></div></div>
+      <div class="sk-count" style="color:${hit?'var(--gold)':'var(--text-2)'}">${s.count}×</div>
+    </div>`;
   }).join('');
 }
 
-// ── WATCHLIST TOGGLE ──
-function toggleWatch(pair) {
-  watchlist = watchlist.includes(pair) ? watchlist.filter(p => p !== pair) : [...watchlist, pair];
-  localStorage.setItem("kael_watchlist", JSON.stringify(watchlist));
-  renderAll();
+function renderAlerts(alerts) {
+  const el = document.getElementById('alerts-body');
+  if (!el) return;
+  if (!alerts.length) { el.innerHTML = `<div class="empty"><div class="empty-icon">🔔</div>No alerts yet</div>`; return; }
+  el.innerHTML = alerts.map(a => {
+    const bull = a.roc>0;
+    return `<div class="tl-row">
+      <div class="tl-ts">${fmtTime(a.t)}</div>
+      <div class="tl-dot ${bull?'bull':'bear'}"></div>
+      <div class="tl-body">
+        <div class="tl-pair" style="color:${bull?'var(--bull)':'var(--bear)'}">
+          ${bull?'▲':'▼'} ${a.pair}
+        </div>
+        <div class="tl-detail">${a.streak}× streak · ${bull?'+':''}${a.roc.toFixed(2)}%</div>
+      </div>
+    </div>`;
+  }).join('');
 }
 
-// ── SEARCH ──
-function filterPairs(val) {
-  searchQuery = val;
-  if (latestData) renderAllPairs(latestData);
-}
-
-// ── TABS ──
-function switchTab(tab) {
-  ["top5","watchlist","all"].forEach(t => {
-    document.getElementById("tab-"+t).style.display = t === tab ? "block" : "none";
+// ═══════════════════════════════════════════════════════════
+// ACTIONS
+// ═══════════════════════════════════════════════════════════
+function setTab(tab) {
+  state.activeTab = tab;
+  localStorage.setItem('fm_tab', tab);
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.getAttribute('data-tab') === tab);
   });
-  document.querySelectorAll(".tab").forEach((el, i) => {
-    el.classList.toggle("active", ["top5","watchlist","all"][i] === tab);
+  const ctx = document.getElementById('header-ctx');
+  const meta = TABS.find(t => t.id === tab);
+  if (ctx && meta) ctx.textContent = '· ' + meta.label;
+  updateDashboard();
+}
+
+function setTheme(t) {
+  state.theme = t;
+  localStorage.setItem('fm_theme', t);
+  applyTheme();
+  syncThemeToggle();
+}
+function applyTheme() {
+  document.documentElement.setAttribute('data-theme', state.theme);
+}
+function syncThemeToggle() {
+  document.querySelectorAll('.theme-toggle').forEach(wrap => {
+    wrap.querySelectorAll('.theme-opt').forEach(btn => {
+      btn.classList.toggle('active', btn.getAttribute('data-theme') === state.theme);
+    });
   });
 }
 
-// ── MODAL ──
-function openModal(pair, category) {
-  // Cari history untuk pair ini di semua kategori
-  const pairHistory = [];
-  historyData.forEach(snapshot => {
-    const allInSnap = [
-      ...(snapshot.forex||[]).map(p => ({...p, cat:"FOREX"})),
-      ...(snapshot.metals||[]).map(p => ({...p, cat:"METALS"})),
-      ...(snapshot.crypto||[]).map(p => ({...p, cat:"CRYPTO"})),
-    ];
-    const found = allInSnap.find(p => p.pair === pair);
-    if (found) {
-      const catArr = found.cat === "FOREX" ? (snapshot.forex||[]) : found.cat === "METALS" ? (snapshot.metals||[]) : (snapshot.crypto||[]);
-      pairHistory.push({
-        time: snapshot.time,
-        pct: parseFloat(found.pct),
-        dir: found.dir,
-        rank: catArr.indexOf(catArr.find(p => p.pair === pair)) + 1,
-        cat: found.cat
-      });
-    }
-  });
-
-  const latest = pairHistory[pairHistory.length - 1];
-  const isLong = latest?.dir === "LONG";
-  const color = isLong ? "#4ade80" : "#f87171";
-  const cat = latest?.cat || category || "";
-
-  document.getElementById("modal-pair-name").textContent = pair;
-  document.getElementById("modal-pair-cat").textContent = cat;
-  document.getElementById("modal-inner").style.border = `1px solid ${isLong ? "#4ade8044" : "#f8717144"}`;
-
-  const badge = document.getElementById("modal-pair-badge");
-  badge.textContent = latest?.dir || "—";
-  badge.style.cssText = `background:${isLong?"#4ade8022":"#f8717122"};color:${color};border:1px solid ${isLong?"#4ade8044":"#f8717144"};display:inline-block;padding:2px 10px;border-radius:4px;font-size:11px;font-weight:700;letter-spacing:1.5px`;
-
-  drawChart(pairHistory, isLong);
-
-  document.getElementById("modal-history").innerHTML = !pairHistory.length
-    ? '<div class="empty-state">Belum ada history</div>'
-    : [...pairHistory].reverse().map((h, i) => `
-        <div class="history-item ${i===0?'latest':''}">
-          <span class="history-time">${h.time?.split("|")[1]?.trim()||"—"}</span>
-          <span class="history-rank">#${h.rank}</span>
-          <span class="history-pct ${h.dir==='LONG'?'long':'short'}">${h.pct>=0?'+':''}${h.pct.toFixed(2)}%</span>
-          <span class="history-dir ${h.dir==='LONG'?'long-bg':'short-bg'}">${h.dir}</span>
-        </div>`).join('');
-
-  document.getElementById("modal").classList.add("open");
+function setSort(col) {
+  if (state.sortBy===col) state.sortAsc=!state.sortAsc;
+  else { state.sortBy=col; state.sortAsc=col==='name'; }
+  updateDashboard();
 }
+function setShowN(v) { state.showN=parseInt(v,10); localStorage.setItem('fm_showN',v); updateDashboard(); }
+function setStreakTh(v) { state.streakTh=parseInt(v,10); localStorage.setItem('fm_th',v); updateDashboard(); }
+function toggleFav() { state.filterFav=!state.filterFav; updateDashboard(); }
+function togglePairFav(p) { state.favorites[p]?delete state.favorites[p]:state.favorites[p]=true; localStorage.setItem('fm_favs',JSON.stringify(state.favorites)); updateDashboard(); }
 
-function drawChart(history, isLong) {
-  const svg = document.getElementById("modal-chart");
-  if (history.length < 2) { svg.innerHTML = '<text x="50%" y="50%" fill="#484f58" text-anchor="middle" font-size="11" font-family="JetBrains Mono">Belum cukup data</text>'; return; }
-  const vals = history.map(h => h.pct);
-  const min = Math.min(...vals), max = Math.max(...vals), range = max-min||0.01;
-  const W=360, H=60, pad=6;
-  const toX = i => (i/(vals.length-1))*W;
-  const toY = v => H-pad-((v-min)/range)*(H-pad*2);
-  const color = isLong ? "#4ade80" : "#f87171";
-  const gid = "g"+Date.now();
-  svg.innerHTML = `
-    <defs><linearGradient id="${gid}" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stop-color="${color}" stop-opacity="0.2"/>
-      <stop offset="100%" stop-color="${color}" stop-opacity="1"/>
-    </linearGradient></defs>
-    <polyline points="${vals.map((v,i)=>`${toX(i)},${toY(v)}`).join(" ")}" fill="none" stroke="url(#${gid})" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-    ${vals.map((v,i)=>`<circle cx="${toX(i)}" cy="${toY(v)}" r="3" fill="${color}" opacity="0.8"/>`).join("")}`;
-}
-
-function closeModal(e) { if (e.target.id==="modal") closeModalDirect(); }
-function closeModalDirect() { document.getElementById("modal").classList.remove("open"); }
-
-function setStatus(state, msg) {
-  const dot = document.getElementById("status-dot");
-  const text = document.getElementById("status-text");
-  dot.className = "status-dot";
-  if (state==="live") { dot.classList.add("live"); text.textContent = msg||"Live"; }
-  else if (state==="error") { dot.classList.add("error"); text.textContent = msg||"Error"; }
-  else { text.textContent = msg||"Loading..."; }
-}
-
-fetchData();
-setInterval(fetchData, 5 * 1000);
+// ═══════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════
+applyTheme();
+render();
+checkToken();
+setInterval(() => { if (state.loggedIn) { const cf=document.getElementById('card-foot'); if (cf&&state.lastFetch) cf.innerHTML=`📡 ${fmtDT(state.lastFetch)} WIB <span style="margin-left:4px;opacity:0.5">· ${ago(state.lastFetch)}</span>`; }}, 1000);
 </script>
 </body>
 </html>
