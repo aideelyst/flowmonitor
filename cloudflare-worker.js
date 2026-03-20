@@ -17,7 +17,7 @@
 //   fm:latest       — latest top N snapshot
 //   fm:streaks      — streak counters per pair
 //   fm:history      — last 50 snapshots
-//   token:{token}   — user data { email, created, expires }
+//   token:{token}   — user data { email, created, expires, devices[], maxDevices }
 //
 // ACCEPTED PAYLOAD KEYS:
 //   "pairs" (Forex) | "items" (Commodity) | "coins" (Crypto) | "inst" (Indices)
@@ -206,12 +206,15 @@ export default {
 
     // ═════════════════════════════════════════════════════════
     // GET /verify — Check if token is valid (for dashboard login)
+    //   ?token=xxx&device=yyy
     // ═════════════════════════════════════════════════════════
     if (request.method === "GET" && url.pathname === "/verify") {
       const auth = await verifyToken(url, request, env);
       return json({
         valid: auth.ok,
         email: auth.email || null,
+        devices: auth.devices || 0,
+        maxDevices: auth.maxDevices || 0,
         error: auth.error || null
       });
     }
@@ -265,24 +268,30 @@ export default {
     // ═════════════════════════════════════════════════════════
 
     // ── POST /admin/token — Create user token ──
-    // Body: { "email": "user@email.com", "days": 30 }
+    // Body: { "email": "user@email.com", "days": 30, "maxDevices": 2 }
     if (request.method === "POST" && url.pathname === "/admin/token") {
       if (!checkAdmin(request, env)) return json({ error: "unauthorized" }, 401);
 
       try {
-        const { email, days } = await request.json();
+        const body = await request.json();
+        const email = body.email;
+        const days = body.days || 30;
+        const maxDevices = body.maxDevices || 2;
+
         if (!email) return json({ error: "email required" }, 400);
 
         const token = generateToken();
-        const expires = Date.now() + (days || 30) * 86400000;
+        const expires = Date.now() + days * 86400000;
 
         await env.FM.put(`token:${token}`, JSON.stringify({
           email,
           created: Date.now(),
-          expires
+          expires,
+          devices: [],
+          maxDevices
         }));
 
-        return json({ token, email, expires: new Date(expires).toISOString() });
+        return json({ token, email, expires: new Date(expires).toISOString(), maxDevices });
       } catch (e) {
         return json({ error: e.message || "internal error" }, 500);
       }
@@ -325,17 +334,41 @@ export default {
       return json(tokens);
     }
 
+    // ── POST /admin/token/reset-devices — Clear device list for a token ──
+    // Body: { "token": "abc123..." }
+    if (request.method === "POST" && url.pathname === "/admin/token/reset-devices") {
+      if (!checkAdmin(request, env)) return json({ error: "unauthorized" }, 401);
+
+      try {
+        const body = await request.json();
+        const token = body.token;
+        if (!token) return json({ error: "token required" }, 400);
+
+        const raw = await env.FM.get(`token:${token}`);
+        if (!raw) return json({ error: "token not found" }, 404);
+
+        const data = JSON.parse(raw);
+        data.devices = [];
+        await env.FM.put(`token:${token}`, JSON.stringify(data));
+
+        return json({ ok: true, token, devicesCleared: true });
+      } catch (e) {
+        return json({ error: e.message || "internal error" }, 500);
+      }
+    }
+
     return json({ error: "not found" }, 404);
   }
 };
 
 // ═══════════════════════════════════════════════════════════
-// AUTH
+// AUTH — with device tracking
 // ═══════════════════════════════════════════════════════════
 
 async function verifyToken(url, request, env) {
   const token = url.searchParams.get("token")
     || (request.headers.get("Authorization") || "").replace("Bearer ", "");
+  const deviceId = url.searchParams.get("device") || null;
 
   if (!token) return { ok: false, error: "token required" };
 
@@ -343,11 +376,41 @@ async function verifyToken(url, request, env) {
   if (!raw) return { ok: false, error: "invalid token" };
 
   const data = JSON.parse(raw);
+
+  // Check expiry
   if (data.expires < Date.now()) {
     return { ok: false, error: "token expired" };
   }
 
-  return { ok: true, email: data.email };
+  // ── Device tracking ──
+  // Backward-compatible: old tokens tanpa devices[] tetap jalan
+  if (deviceId && Array.isArray(data.devices)) {
+    const maxDev = data.maxDevices || 2;
+    const alreadyRegistered = data.devices.includes(deviceId);
+
+    if (!alreadyRegistered) {
+      if (data.devices.length >= maxDev) {
+        // Slot penuh, device baru → tolak
+        return {
+          ok: false,
+          error: "device limit reached",
+          maxDevices: maxDev,
+          devices: data.devices.length
+        };
+      }
+
+      // Register device baru
+      data.devices.push(deviceId);
+      await env.FM.put(`token:${token}`, JSON.stringify(data));
+    }
+  }
+
+  return {
+    ok: true,
+    email: data.email,
+    devices: data.devices ? data.devices.length : 0,
+    maxDevices: data.maxDevices || 0
+  };
 }
 
 function checkAdmin(request, env) {
