@@ -748,21 +748,6 @@
 const API_URL = 'https://fm.aideelyst.workers.dev';
 let ably = null, ablyChannel = null;
 
-// Asset key mapping
-const ASSET_KEYS = ['pairs', 'items', 'coins', 'inst'];
-const TAB_TO_ASSET = { forex: 'pairs', commodities: 'items', crypto: 'coins', indices: 'inst' };
-const ASSET_TO_TAB = { pairs: 'forex', items: 'commodities', coins: 'crypto', inst: 'indices' };
-// Each payload uses its own array key
-const ENTRY_KEY = { pairs: 'pairs', items: 'items', coins: 'coins', inst: 'inst' };
-
-// Tab metadata
-const TABS = [
-  { id: 'forex',       asset: 'pairs', label: 'Forex',       icon: '💱' },
-  { id: 'commodities', asset: 'items', label: 'Commodities', icon: '🥇' },
-  { id: 'crypto',      asset: 'coins', label: 'Crypto',      icon: '₿'  },
-  { id: 'indices',     asset: 'inst',  label: 'Indices',     icon: '📊' },
-];
-
 // ═══════════════════════════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════════════════════════
@@ -771,6 +756,9 @@ let state = {
   loggedIn: false,
   loginError: '',
   loginLoading: false,
+  latest: null,
+  streaks: {},
+  history: [],
   favorites: JSON.parse(localStorage.getItem('fm_favs') || '{}'),
   showN: parseInt(localStorage.getItem('fm_showN') || '10', 10),
   sortBy: 'roc',
@@ -784,49 +772,44 @@ let state = {
   activeTab: localStorage.getItem('fm_tab') || 'forex'
 };
 
-// Per-asset data store
-let assets = {};
-for (const k of ASSET_KEYS) {
-  assets[k] = { entries: [], streaks: {}, history: [], timestamp: null };
-}
-
-// ═══════════════════════════════════════════════════════════
-// HELPERS — Extract entries from raw payload
-// ═══════════════════════════════════════════════════════════
-function extractEntries(raw, assetKey) {
-  if (!raw) return [];
-  let arr = null;
-  // Try the expected key first, then fallback scan (including "indices" alias)
-  const SCAN_KEYS = ['pairs', 'items', 'coins', 'inst', 'indices'];
-  if (raw[assetKey] && Array.isArray(raw[assetKey])) arr = raw[assetKey];
-  else { for (const k of SCAN_KEYS) { if (raw[k] && Array.isArray(raw[k])) { arr = raw[k]; break; } } }
-  if (!arr) return [];
-  // Normalize: ensure every entry has .p (crypto may use .c, indices may use .n)
-  return arr.map(e => {
-    if (e.p) return e;
-    if (e.c) return { p: e.c, r: e.r };
-    if (e.n) return { p: e.n, r: e.r };
-    return e;
-  });
-}
-
 // ═══════════════════════════════════════════════════════════
 // AUTH
 // ═══════════════════════════════════════════════════════════
+
+// Device ID — unique per browser, persistent
+function getDeviceId() {
+  let id = localStorage.getItem('fm_device');
+  if (!id) {
+    id = 'dev_' + crypto.randomUUID().replace(/-/g, '').slice(0, 10);
+    localStorage.setItem('fm_device', id);
+  }
+  return id;
+}
+
+function verifyUrl(token) {
+  return `${API_URL}/verify?token=${encodeURIComponent(token)}&device=${encodeURIComponent(getDeviceId())}`;
+}
+
 async function login() {
   const input = document.getElementById('token-input');
   const token = input.value.trim();
   if (!token) return;
   state.loginLoading = true; state.loginError = ''; render();
   try {
-    const res = await fetch(`${API_URL}/verify?token=${encodeURIComponent(token)}`, { cache: 'no-store' });
+    const res = await fetch(verifyUrl(token), { cache: 'no-store' });
     const data = await res.json();
     if (data.valid) {
       state.token = token; state.loggedIn = true; state.loginLoading = false;
       localStorage.setItem('fm_token', token);
       render(); await fetchData(); await connectRealtime();
     } else {
-      state.loginError = data.error === 'token expired' ? 'Token expired — contact admin.' : 'Invalid token.';
+      if (data.error === 'device limit reached') {
+        state.loginError = 'Token sudah dipakai di device lain.';
+      } else if (data.error === 'token expired' || data.error === 'invalid or expired token') {
+        state.loginError = 'Token expired — streak lagi untuk dapat baru.';
+      } else {
+        state.loginError = 'Invalid token.';
+      }
       state.loginLoading = false; render();
       const el = document.getElementById('token-input');
       if (el) { el.classList.add('error'); setTimeout(() => el.classList.remove('error'), 1200); }
@@ -838,15 +821,14 @@ async function login() {
 
 function logout() {
   closeRealtime();
-  Object.assign(state, { token:'', loggedIn:false, online:false, lastFetch:null, prevRoc:{} });
-  for (const k of ASSET_KEYS) assets[k] = { entries: [], streaks: {}, history: [], timestamp: null };
+  Object.assign(state, { token:'', loggedIn:false, latest:null, streaks:{}, history:[], online:false, lastFetch:null, prevRoc:{} });
   localStorage.removeItem('fm_token'); render();
 }
 
 async function checkToken() {
   if (!state.token) return;
   try {
-    const res = await fetch(`${API_URL}/verify?token=${encodeURIComponent(state.token)}`, { cache: 'no-store' });
+    const res = await fetch(verifyUrl(state.token), { cache: 'no-store' });
     const data = await res.json();
     if (data.valid) { state.loggedIn = true; render(); await fetchData(); await connectRealtime(); }
     else { localStorage.removeItem('fm_token'); state.token = ''; render(); }
@@ -869,28 +851,15 @@ async function connectRealtime() {
   ['connecting','disconnected','suspended','failed'].forEach(e => ably.connection.on(e, () => setOnline(false)));
   ablyChannel = ably.channels.get('flow-monitor');
   await ablyChannel.subscribe('snapshot', msg => {
-    let d = msg.data || {};
-    if (typeof d === 'string') { try { d = JSON.parse(d); } catch(e) { console.warn('Ably parse fail', e); return; } }
-    const assetKey = d.asset || 'pairs';
-    const a = assets[assetKey];
-    if (!a) { console.warn('Unknown asset key:', assetKey); return; }
-    console.log(`[FM] Ably snapshot: asset=${assetKey}, entries=${extractEntries(d.latest, assetKey).length}, streaks=${Object.keys(d.streaks||{}).length}`);
-
-    // Save prev ROC for flash animation
-    const prev = {};
-    for (const e of a.entries) prev[e.p] = e.r;
-    Object.assign(state.prevRoc, prev);
-
-    // Update entries
+    const d = msg.data || {};
+    if (state.latest?.pairs) { const p = {}; for (const x of state.latest.pairs) p[x.p] = x.r; state.prevRoc = p; }
     if (d.latest) {
-      a.entries = extractEntries(d.latest, assetKey);
-      a.timestamp = d.latest.t || Date.now();
-      // Push to history
-      const lt = a.history.length ? a.history[a.history.length-1]?.t : null;
-      if (!lt || lt !== d.latest.t) { a.history.push(d.latest); if (a.history.length > 50) a.history = a.history.slice(-50); }
-      else a.history[a.history.length-1] = d.latest;
+      state.latest = d.latest;
+      const lt = state.history.length ? state.history[state.history.length-1]?.t : null;
+      if (!lt || lt !== d.latest.t) { state.history.push(d.latest); if (state.history.length > 50) state.history = state.history.slice(-50); }
+      else state.history[state.history.length-1] = d.latest;
     }
-    if (d.streaks) a.streaks = d.streaks;
+    if (d.streaks) state.streaks = d.streaks;
     state.online = true; state.lastFetch = Date.now(); updateDashboard();
   });
 }
@@ -901,49 +870,22 @@ async function connectRealtime() {
 async function fetchData() {
   if (!state.token || !state.loggedIn) return;
   try {
-    // Fetch all asset classes at once
-    const allRes = await fetch(`${API_URL}/fm/all?token=${encodeURIComponent(state.token)}&t=${Date.now()}`, { cache:'no-store' });
-    if (allRes.status === 401) { logout(); return; }
-    const allData = await allRes.json();
-    console.log('[FM] /fm/all response:', Object.keys(allData).map(k => `${k}: latest=${!!allData[k]?.latest}, streaks=${Object.keys(allData[k]?.streaks||{}).length}`));
-
-    // Populate per-asset caches
-    for (const k of ASSET_KEYS) {
-      if (allData[k]) {
-        const raw = allData[k].latest;
-        const entries = extractEntries(raw, k);
-        assets[k].entries = entries;
-        assets[k].streaks = allData[k].streaks || {};
-        assets[k].timestamp = raw?.t || null;
-        if (entries.length) console.log(`[FM] ${k}: ${entries.length} entries, ${Object.keys(allData[k].streaks||{}).length} streaks`);
-      }
-    }
-
-    // Fetch history per asset (parallel)
-    const histFetches = ASSET_KEYS.map(k =>
-      fetch(`${API_URL}/fm/history?asset=${k}&token=${encodeURIComponent(state.token)}&t=${Date.now()}`, { cache:'no-store' })
-        .then(r => r.status === 200 ? r.json() : [])
-        .catch(() => [])
-    );
-    const histResults = await Promise.all(histFetches);
-    ASSET_KEYS.forEach((k, i) => { assets[k].history = Array.isArray(histResults[i]) ? histResults[i] : []; });
-
+    const [lr, hr] = await Promise.all([
+      fetch(`${API_URL}/fm?token=${encodeURIComponent(state.token)}&t=${Date.now()}`, { cache:'no-store' }),
+      fetch(`${API_URL}/fm/history?token=${encodeURIComponent(state.token)}&t=${Date.now()}`, { cache:'no-store' })
+    ]);
+    if (lr.status === 401 || hr.status === 401) { logout(); return; }
+    const ld = await lr.json(), hd = await hr.json();
+    if (state.latest?.pairs) { const p = {}; for (const x of state.latest.pairs) p[x.p] = x.r; state.prevRoc = p; }
+    state.latest = ld.latest; state.streaks = ld.streaks || {};
+    state.history = Array.isArray(hd) ? hd : [];
     state.online = true; state.lastFetch = Date.now(); updateDashboard();
   } catch(e) { state.online = false; updateDashboard(); }
 }
 
 // ═══════════════════════════════════════════════════════════
-// DATA ACCESSORS — use active tab's asset data
+// HELPERS
 // ═══════════════════════════════════════════════════════════
-function activeAssetKey() { return TAB_TO_ASSET[state.activeTab] || 'pairs'; }
-function activeAsset() { return assets[activeAssetKey()]; }
-
-function tabCounts() {
-  const c = {};
-  for (const t of TABS) c[t.id] = assets[t.asset].entries.length;
-  return c;
-}
-
 function fmtTime(ts) {
   if (!ts) return '--:--';
   return new Date(ts).toLocaleTimeString('en-GB', { timeZone:'Asia/Jakarta', hour:'2-digit', minute:'2-digit' });
@@ -962,39 +904,82 @@ function ago(ts) {
 function rankCls(r) { return r===1?'rank-1':r===2?'rank-2':r===3?'rank-3':'rank-n'; }
 function sortArrow(col) { return state.sortBy!==col?'':`<span class="arr">${state.sortAsc?'↑':'↓'}</span>`; }
 
+// ── Asset classification ──
+const CRYPTO_BASES = ['BTC','ETH','SOL','XRP','ADA','DOGE','BNB','DOT','AVAX','LINK','MATIC','POL','LTC','SHIB','UNI','ATOM','APT','SUI','TON','NEAR','FTM','OP','ARB','INJ','TIA','PEPE','WIF','BONK','RENDER','FET','TAO'];
+const COMMODITY_PFX = ['XAU','XAG','XPT','XPD'];
+const COMMODITY_KW = ['OIL','WTI','BRENT','NATGAS','NGAS','COPPER','COCOA','COFFEE','SUGAR','WHEAT','CORN','SOYBEAN','COTTON','LUMBER','PALLADIUM','PLATINUM'];
+const INDEX_KW = ['US30','US500','US100','US2000','NAS100','NDX','SPX','DJI','DAX','GER40','GER30','UK100','FTSE','JP225','NI225','AUS200','FRA40','CAC40','EU50','STOXX','HSI','CHINA','HK50','VIX','RUSSELL'];
+const FOREX_CCYS = ['EUR','USD','GBP','JPY','AUD','NZD','CAD','CHF'];
+
+function classifyPair(name) {
+  const u = name.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  // Index
+  for (const kw of INDEX_KW) if (u.includes(kw)) return 'indices';
+  // Commodity
+  for (const pfx of COMMODITY_PFX) if (u.startsWith(pfx)) return 'commodities';
+  for (const kw of COMMODITY_KW) if (u.includes(kw)) return 'commodities';
+  // Crypto
+  for (const base of CRYPTO_BASES) {
+    if (u.startsWith(base) || u.endsWith(base)) return 'crypto';
+  }
+  // Forex: check if pair is made of two known currency codes
+  const base3 = u.slice(0, 3);
+  const quote3 = u.slice(3, 6);
+  if (FOREX_CCYS.includes(base3) && FOREX_CCYS.includes(quote3)) return 'forex';
+  // Fallback: if nothing matched, put in forex
+  return 'forex';
+}
+
+// Tab metadata
+const TABS = [
+  { id: 'forex',       label: 'Forex',       icon: '💱' },
+  { id: 'commodities', label: 'Commodities', icon: '🥇' },
+  { id: 'crypto',      label: 'Crypto',      icon: '₿'  },
+  { id: 'indices',     label: 'Indices',     icon: '📊' },
+];
+
+function pairsForTab(tab) {
+  if (!state.latest?.pairs) return [];
+  return state.latest.pairs.filter(p => classifyPair(p.p) === tab);
+}
+
+function tabCounts() {
+  const c = { forex:0, commodities:0, crypto:0, indices:0 };
+  if (!state.latest?.pairs) return c;
+  for (const p of state.latest.pairs) c[classifyPair(p.p)]++;
+  return c;
+}
+
 function getSortedPairs() {
-  const ast = activeAsset();
-  if (!ast.entries.length) return [];
-  let p = ast.entries.map((x,i) => ({...x, rank:i+1}));
+  if (!state.latest?.pairs) return [];
+  // Filter by active tab
+  let p = state.latest.pairs
+    .filter(x => classifyPair(x.p) === state.activeTab)
+    .map((x,i) => ({...x, rank:i+1}));
   if (state.filterFav) p = p.filter(x => state.favorites[x.p]);
-  const sk = ast.streaks;
   if (state.sortBy==='name') p.sort((a,b) => state.sortAsc?a.p.localeCompare(b.p):b.p.localeCompare(a.p));
-  else if (state.sortBy==='streak') p.sort((a,b) => { const sa=sk[a.p]||0, sb=sk[b.p]||0; return state.sortAsc?sa-sb:sb-sa; });
+  else if (state.sortBy==='streak') p.sort((a,b) => { const sa=state.streaks[a.p]||0, sb=state.streaks[b.p]||0; return state.sortAsc?sa-sb:sb-sa; });
   else p.sort((a,b) => state.sortAsc?Math.abs(a.r)-Math.abs(b.r):Math.abs(b.r)-Math.abs(a.r));
   return p.slice(0, state.showN);
 }
-
 function getSortedStreaks() {
-  const a = activeAsset();
-  return Object.entries(a.streaks)
-    .map(([pair,count]) => ({pair, count, roc: a.entries.find(e=>e.p===pair)?.r || 0}))
+  return Object.entries(state.streaks)
+    .filter(([pair]) => classifyPair(pair) === state.activeTab)
+    .map(([pair,count]) => ({pair,count,roc:state.latest?.pairs?.find(p=>p.p===pair)?.r||0}))
     .sort((a,b) => b.count-a.count).slice(0,10);
 }
-
 function getAlerts() {
-  const a = activeAsset();
-  const ak = activeAssetKey();
   const alerts=[], seen={};
-  for (const snap of a.history.slice(-20).reverse()) {
-    const entries = extractEntries(snap, ak);
-    for (const p of entries) {
-      const s = a.streaks[p.p]||0;
+  for (const snap of state.history.slice(-20).reverse()) {
+    if (!snap.pairs) continue;
+    for (const p of snap.pairs) {
+      if (classifyPair(p.p) !== state.activeTab) continue;
+      const s=state.streaks[p.p]||0;
       if (s>=state.streakTh && !seen[p.p]) { alerts.push({pair:p.p,roc:p.r,streak:s,t:snap.t}); seen[p.p]=true; }
     }
   }
   return alerts.slice(0,10);
 }
-
 function flashCls(pair,roc) {
   const prev=state.prevRoc[pair];
   if (prev===undefined) return '';
@@ -1003,13 +988,11 @@ function flashCls(pair,roc) {
   return '';
 }
 
+// Build sparkline SVG from history for a given pair
 function sparkSVG(pair) {
-  const a = activeAsset();
-  const ak = activeAssetKey();
   const vals = [];
-  for (const snap of a.history.slice(-12)) {
-    const entries = extractEntries(snap, ak);
-    const found = entries.find(e => e.p === pair);
+  for (const snap of state.history.slice(-12)) {
+    const found = snap.pairs?.find(p => p.p === pair);
     if (found) vals.push(found.r);
   }
   if (vals.length < 2) return '';
@@ -1023,29 +1006,35 @@ function sparkSVG(pair) {
   });
   const last = vals[vals.length-1];
   const col = last >= 0 ? 'var(--bull)' : 'var(--bear)';
+  const colDim = last >= 0 ? 'var(--bull-dim)' : 'var(--bear-dim)';
+  // gradient fill
+  const firstPt = pts[0];
   const lastPt = pts[pts.length-1];
   return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" fill="none" xmlns="http://www.w3.org/2000/svg">
     <defs>
-      <linearGradient id="sg_${pair.replace(/[^a-zA-Z0-9]/g,'')}" x1="0" y1="0" x2="0" y2="1">
+      <linearGradient id="sg_${pair}" x1="0" y1="0" x2="0" y2="1">
         <stop offset="0%" stop-color="${col}" stop-opacity="0.15"/>
         <stop offset="100%" stop-color="${col}" stop-opacity="0"/>
       </linearGradient>
     </defs>
-    <polygon points="${pts.join(' ')} ${w-pad},${h-pad} ${pad},${h-pad}" fill="url(#sg_${pair.replace(/[^a-zA-Z0-9]/g,'')})" />
+    <polygon points="${pts.join(' ')} ${w-pad},${h-pad} ${pad},${h-pad}" fill="url(#sg_${pair})" />
     <polyline points="${pts.join(' ')}" stroke="${col}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.8"/>
     <circle cx="${lastPt.split(',')[0]}" cy="${lastPt.split(',')[1]}" r="2" fill="${col}"/>
   </svg>`;
 }
 
+// Summary stats
 function getSummary() {
-  const a = activeAsset();
-  if (!a.entries.length) return null;
-  const entries = a.entries;
-  const bulls = entries.filter(p => p.r > 0).length;
-  const strongest = [...entries].sort((a,b) => Math.abs(b.r)-Math.abs(a.r))[0];
-  const avgMom = entries.reduce((s,p) => s+Math.abs(p.r), 0) / entries.length;
-  const activeStreaks = Object.values(a.streaks).filter(v => v >= state.streakTh).length;
-  return { total: entries.length, bulls, bears: entries.length-bulls, strongest, avgMom, activeStreaks };
+  if (!state.latest?.pairs?.length) return null;
+  const pairs = state.latest.pairs.filter(p => classifyPair(p.p) === state.activeTab);
+  if (!pairs.length) return null;
+  const bulls = pairs.filter(p => p.r > 0).length;
+  const strongest = [...pairs].sort((a,b) => Math.abs(b.r)-Math.abs(a.r))[0];
+  const avgMom = pairs.reduce((s,p) => s+Math.abs(p.r), 0) / pairs.length;
+  const activeStreaks = Object.entries(state.streaks)
+    .filter(([k]) => classifyPair(k) === state.activeTab)
+    .filter(([,v]) => v >= state.streakTh).length;
+  return { total: pairs.length, bulls, bears: pairs.length-bulls, strongest, avgMom, activeStreaks };
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -1075,7 +1064,7 @@ function renderLogin() {
           <div class="login-logomark">FM</div>
           <div class="login-wordmark">Flow Monitor</div>
         </div>
-        <div class="login-sub">Real-time multi-asset momentum analytics</div>
+        <div class="login-sub">Real-time currency strength analytics</div>
         <div class="login-field">
           <label class="login-label">Access Token</label>
           <input class="login-input" id="token-input" type="text" placeholder="xxxx-xxxx-xxxx"
@@ -1171,7 +1160,6 @@ function renderShell() {
 // ── Dashboard update ──
 function updateDashboard() {
   if (!state.loggedIn || !document.getElementById('app-shell')) return;
-  const a = activeAsset();
   const pairs = getSortedPairs();
   const streaks = getSortedStreaks();
   const alerts = getAlerts();
@@ -1189,7 +1177,7 @@ function updateDashboard() {
     if (b) b.classList.toggle('active', state.sortBy===k);
   });
   const pc = document.getElementById('pair-ct');
-  if (pc) pc.textContent = a.entries.length ? a.entries.length+' items' : '—';
+  if (pc) pc.textContent = state.latest ? pairs.length+' pairs' : '—';
   const thl = document.getElementById('th-label');
   if (thl) thl.textContent = 'th:'+state.streakTh;
 
@@ -1239,7 +1227,7 @@ function renderSummary() {
   }
   el.innerHTML = `
     <div class="summary-card fin fin-1">
-      <div class="summary-label">Items tracked</div>
+      <div class="summary-label">Pairs tracked</div>
       <div class="summary-value">${s.total}</div>
       <div class="summary-sub" style="color:var(--bull)">${s.bulls} bull</span> · <span style="color:var(--bear)">${s.bears} bear</span></div>
     </div>
@@ -1264,9 +1252,7 @@ function renderSummary() {
 function renderTable(pairs) {
   const el = document.getElementById('table-body');
   if (!el) return;
-  const a = activeAsset();
-  const hasData = a.entries.length > 0;
-  if (!hasData && !state.lastFetch) {
+  if (!state.latest) {
     el.innerHTML = Array(6).fill(0).map(() => `
       <div class="skeleton-row">
         <div class="skeleton-box" style="width:26px;height:26px;border-radius:6px"></div>
@@ -1281,23 +1267,23 @@ function renderTable(pairs) {
   if (!pairs.length) {
     const tabMeta = TABS.find(t => t.id === state.activeTab);
     const tabLabel = tabMeta ? tabMeta.label : state.activeTab;
-    const anyAssetHasData = ASSET_KEYS.some(k => assets[k].entries.length > 0);
-    const emptyMsg = anyAssetHasData
-      ? `No ${tabLabel} data yet — add the ${tabLabel} Pine Script indicator and set up its alert`
+    const hasAnyData = state.latest?.pairs?.length > 0;
+    const emptyMsg = hasAnyData
+      ? `No ${tabLabel} pairs in current data — add them to your Pine Script indicator`
       : 'No data — waiting for Pine Script push';
-    el.innerHTML = `<div class="empty"><div class="empty-icon">${anyAssetHasData ? '🔍' : '📡'}</div>${emptyMsg}</div>`;
+    el.innerHTML = `<div class="empty"><div class="empty-icon">${hasAnyData ? '🔍' : '📡'}</div>${emptyMsg}</div>`;
     return;
   }
   el.innerHTML = `<table class="fm-table"><thead><tr>
     <th style="width:38px">#</th>
-    <th onclick="setSort('name')" class="${state.sortBy==='name'?'sorted':''}">Name${sortArrow('name')}</th>
+    <th onclick="setSort('name')" class="${state.sortBy==='name'?'sorted':''}">Pair${sortArrow('name')}</th>
     <th style="width:72px">Chart</th>
     <th onclick="setSort('roc')" class="${state.sortBy==='roc'?'sorted':''}" style="text-align:right">ROC %${sortArrow('roc')}</th>
     <th style="width:36px"></th>
     <th onclick="setSort('streak')" class="${state.sortBy==='streak'?'sorted':''}" style="text-align:right">Streak${sortArrow('streak')}</th>
   </tr></thead><tbody>${pairs.map(p => {
     const bull = p.r>0;
-    const sk = a.streaks[p.p]||0;
+    const sk = state.streaks[p.p]||0;
     const isFav = state.favorites[p.p];
     const hit = sk>=state.streakTh;
     const fl = flashCls(p.p, p.r);
@@ -1356,9 +1342,11 @@ function renderAlerts(alerts) {
 function setTab(tab) {
   state.activeTab = tab;
   localStorage.setItem('fm_tab', tab);
+  // Update tab buttons
   document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.classList.toggle('active', btn.getAttribute('data-tab') === tab);
   });
+  // Update header context
   const ctx = document.getElementById('header-ctx');
   const meta = TABS.find(t => t.id === tab);
   if (ctx && meta) ctx.textContent = '· ' + meta.label;
@@ -1395,6 +1383,7 @@ function togglePairFav(p) { state.favorites[p]?delete state.favorites[p]:state.f
 // ═══════════════════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════════════════
+// INIT
 applyTheme();
 render();
 checkToken();
