@@ -748,17 +748,33 @@
 const API_URL = 'https://fm.aideelyst.workers.dev';
 let ably = null, ablyChannel = null;
 
+// Tab ↔ Worker asset key mapping
+const TABS = [
+  { id: 'forex',       asset: 'pairs', label: 'Forex',       icon: '💱' },
+  { id: 'commodities', asset: 'items', label: 'Commodities', icon: '🥇' },
+  { id: 'crypto',      asset: 'coins', label: 'Crypto',      icon: '₿'  },
+  { id: 'indices',     asset: 'inst',  label: 'Indices',     icon: '📊' },
+];
+const TAB_ASSET = {};
+const ASSET_TAB = {};
+for (const t of TABS) { TAB_ASSET[t.id] = t.asset; ASSET_TAB[t.asset] = t.id; }
+
 // ═══════════════════════════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════════════════════════
+function emptyStore() { return { latest: null, streaks: {}, history: [] }; }
+
 let state = {
   token: localStorage.getItem('fm_token') || '',
   loggedIn: false,
   loginError: '',
   loginLoading: false,
-  latest: null,
-  streaks: {},
-  history: [],
+  data: {
+    pairs: emptyStore(),
+    items: emptyStore(),
+    coins: emptyStore(),
+    inst:  emptyStore(),
+  },
   favorites: JSON.parse(localStorage.getItem('fm_favs') || '{}'),
   showN: parseInt(localStorage.getItem('fm_showN') || '10', 10),
   sortBy: 'roc',
@@ -772,20 +788,22 @@ let state = {
   activeTab: localStorage.getItem('fm_tab') || 'forex'
 };
 
+// Active tab helpers
+function activeStore() { return state.data[TAB_ASSET[state.activeTab]] || state.data.pairs; }
+function getEntries(latestObj, assetKey) {
+  if (!latestObj) return [];
+  return latestObj[assetKey] || latestObj.pairs || latestObj.items || latestObj.coins || latestObj.inst || [];
+}
+function activeEntries() { return getEntries(activeStore().latest, TAB_ASSET[state.activeTab]); }
+
 // ═══════════════════════════════════════════════════════════
 // AUTH
 // ═══════════════════════════════════════════════════════════
-
-// Device ID — unique per browser, persistent
 function getDeviceId() {
   let id = localStorage.getItem('fm_device');
-  if (!id) {
-    id = 'dev_' + crypto.randomUUID().replace(/-/g, '').slice(0, 10);
-    localStorage.setItem('fm_device', id);
-  }
+  if (!id) { id = 'dev_' + crypto.randomUUID().replace(/-/g, '').slice(0, 10); localStorage.setItem('fm_device', id); }
   return id;
 }
-
 function verifyUrl(token) {
   return `${API_URL}/verify?token=${encodeURIComponent(token)}&device=${encodeURIComponent(getDeviceId())}`;
 }
@@ -803,25 +821,21 @@ async function login() {
       localStorage.setItem('fm_token', token);
       render(); await fetchData(); await connectRealtime();
     } else {
-      if (data.error === 'device limit reached') {
-        state.loginError = 'Token sudah dipakai di device lain.';
-      } else if (data.error === 'token expired' || data.error === 'invalid or expired token') {
-        state.loginError = 'Token expired — streak lagi untuk dapat baru.';
-      } else {
-        state.loginError = 'Invalid token.';
-      }
+      if (data.error === 'device limit reached') state.loginError = 'Token sudah dipakai di device lain.';
+      else if (data.error === 'token expired' || data.error === 'invalid or expired token') state.loginError = 'Token expired — streak lagi untuk dapat baru.';
+      else state.loginError = 'Invalid token.';
       state.loginLoading = false; render();
       const el = document.getElementById('token-input');
       if (el) { el.classList.add('error'); setTimeout(() => el.classList.remove('error'), 1200); }
     }
-  } catch (e) {
-    state.loginError = 'Connection failed. Try again.'; state.loginLoading = false; render();
-  }
+  } catch (e) { state.loginError = 'Connection failed. Try again.'; state.loginLoading = false; render(); }
 }
 
 function logout() {
   closeRealtime();
-  Object.assign(state, { token:'', loggedIn:false, latest:null, streaks:{}, history:[], online:false, lastFetch:null, prevRoc:{} });
+  state.token = ''; state.loggedIn = false;
+  state.data = { pairs: emptyStore(), items: emptyStore(), coins: emptyStore(), inst: emptyStore() };
+  state.online = false; state.lastFetch = null; state.prevRoc = {};
   localStorage.removeItem('fm_token'); render();
 }
 
@@ -850,37 +864,70 @@ async function connectRealtime() {
   ably.connection.on('connected', () => { state.online = true; state.lastFetch = Date.now(); updateDashboard(); });
   ['connecting','disconnected','suspended','failed'].forEach(e => ably.connection.on(e, () => setOnline(false)));
   ablyChannel = ably.channels.get('flow-monitor');
+
   await ablyChannel.subscribe('snapshot', msg => {
     const d = msg.data || {};
-    if (state.latest?.pairs) { const p = {}; for (const x of state.latest.pairs) p[x.p] = x.r; state.prevRoc = p; }
-    if (d.latest) {
-      state.latest = d.latest;
-      const lt = state.history.length ? state.history[state.history.length-1]?.t : null;
-      if (!lt || lt !== d.latest.t) { state.history.push(d.latest); if (state.history.length > 50) state.history = state.history.slice(-50); }
-      else state.history[state.history.length-1] = d.latest;
+    const assetKey = d.asset; // 'pairs' | 'items' | 'coins' | 'inst'
+    if (!assetKey || !state.data[assetKey]) return;
+    const store = state.data[assetKey];
+
+    // Save prev ROC for flash (active tab only)
+    if (assetKey === TAB_ASSET[state.activeTab]) {
+      const entries = getEntries(store.latest, assetKey);
+      const p = {}; for (const x of entries) p[x.p] = x.r;
+      state.prevRoc = p;
     }
-    if (d.streaks) state.streaks = d.streaks;
+
+    if (d.latest) {
+      store.latest = d.latest;
+      const lt = store.history.length ? store.history[store.history.length - 1]?.t : null;
+      if (!lt || lt !== d.latest.t) { store.history.push(d.latest); if (store.history.length > 50) store.history = store.history.slice(-50); }
+      else store.history[store.history.length - 1] = d.latest;
+    }
+    if (d.streaks) store.streaks = d.streaks;
+
     state.online = true; state.lastFetch = Date.now(); updateDashboard();
   });
 }
 
 // ═══════════════════════════════════════════════════════════
-// DATA
+// DATA — fetch all asset classes
 // ═══════════════════════════════════════════════════════════
 async function fetchData() {
   if (!state.token || !state.loggedIn) return;
+  const tk = encodeURIComponent(state.token);
+  const bust = Date.now();
   try {
-    const [lr, hr] = await Promise.all([
-      fetch(`${API_URL}/fm?token=${encodeURIComponent(state.token)}&t=${Date.now()}`, { cache:'no-store' }),
-      fetch(`${API_URL}/fm/history?token=${encodeURIComponent(state.token)}&t=${Date.now()}`, { cache:'no-store' })
-    ]);
-    if (lr.status === 401 || hr.status === 401) { logout(); return; }
-    const ld = await lr.json(), hd = await hr.json();
-    if (state.latest?.pairs) { const p = {}; for (const x of state.latest.pairs) p[x.p] = x.r; state.prevRoc = p; }
-    state.latest = ld.latest; state.streaks = ld.streaks || {};
-    state.history = Array.isArray(hd) ? hd : [];
+    // All latest + streaks in one call
+    const allRes = await fetch(`${API_URL}/fm/all?token=${tk}&t=${bust}`, { cache: 'no-store' });
+    if (allRes.status === 401) { logout(); return; }
+    const allData = await allRes.json();
+
+    // History per asset in parallel
+    const histResults = await Promise.all(['pairs','items','coins','inst'].map(async asset => {
+      try {
+        const hr = await fetch(`${API_URL}/fm/history?token=${tk}&asset=${asset}&t=${bust}`, { cache: 'no-store' });
+        if (hr.status === 401) return { asset, history: [] };
+        const hd = await hr.json();
+        return { asset, history: Array.isArray(hd) ? hd : [] };
+      } catch { return { asset, history: [] }; }
+    }));
+
+    // Save prev ROC for active tab
+    const ak = TAB_ASSET[state.activeTab];
+    const cur = getEntries(state.data[ak].latest, ak);
+    const p = {}; for (const x of cur) p[x.p] = x.r;
+    state.prevRoc = p;
+
+    // Populate stores
+    for (const asset of ['pairs','items','coins','inst']) {
+      const d = allData[asset];
+      if (d) { state.data[asset].latest = d.latest; state.data[asset].streaks = d.streaks || {}; }
+    }
+    for (const { asset, history } of histResults) { state.data[asset].history = history; }
+
     state.online = true; state.lastFetch = Date.now(); updateDashboard();
-  } catch(e) { state.online = false; updateDashboard(); }
+  } catch (e) { state.online = false; updateDashboard(); }
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -897,144 +944,104 @@ function fmtDT(ts) {
 function ago(ts) {
   if (!ts) return '';
   const s = Math.floor((Date.now()-ts)/1000);
-  if (s<60) return s+'s ago';
-  if (s<3600) return Math.floor(s/60)+'m ago';
+  if (s<60) return s+'s ago'; if (s<3600) return Math.floor(s/60)+'m ago';
   return Math.floor(s/3600)+'h ago';
 }
 function rankCls(r) { return r===1?'rank-1':r===2?'rank-2':r===3?'rank-3':'rank-n'; }
 function sortArrow(col) { return state.sortBy!==col?'':`<span class="arr">${state.sortAsc?'↑':'↓'}</span>`; }
 
-// ── Asset classification ──
-const CRYPTO_BASES = ['BTC','ETH','SOL','XRP','ADA','DOGE','BNB','DOT','AVAX','LINK','MATIC','POL','LTC','SHIB','UNI','ATOM','APT','SUI','TON','NEAR','FTM','OP','ARB','INJ','TIA','PEPE','WIF','BONK','RENDER','FET','TAO'];
-const COMMODITY_PFX = ['XAU','XAG','XPT','XPD'];
-const COMMODITY_KW = ['OIL','WTI','BRENT','NATGAS','NGAS','COPPER','COCOA','COFFEE','SUGAR','WHEAT','CORN','SOYBEAN','COTTON','LUMBER','PALLADIUM','PLATINUM'];
-const INDEX_KW = ['US30','US500','US100','US2000','NAS100','NDX','SPX','DJI','DAX','GER40','GER30','UK100','FTSE','JP225','NI225','AUS200','FRA40','CAC40','EU50','STOXX','HSI','CHINA','HK50','VIX','RUSSELL'];
-const FOREX_CCYS = ['EUR','USD','GBP','JPY','AUD','NZD','CAD','CHF'];
-
-function classifyPair(name) {
-  const u = name.toUpperCase().replace(/[^A-Z0-9]/g, '');
-  // Index
-  for (const kw of INDEX_KW) if (u.includes(kw)) return 'indices';
-  // Commodity
-  for (const pfx of COMMODITY_PFX) if (u.startsWith(pfx)) return 'commodities';
-  for (const kw of COMMODITY_KW) if (u.includes(kw)) return 'commodities';
-  // Crypto
-  for (const base of CRYPTO_BASES) {
-    if (u.startsWith(base) || u.endsWith(base)) return 'crypto';
-  }
-  // Forex: check if pair is made of two known currency codes
-  const base3 = u.slice(0, 3);
-  const quote3 = u.slice(3, 6);
-  if (FOREX_CCYS.includes(base3) && FOREX_CCYS.includes(quote3)) return 'forex';
-  // Fallback: if nothing matched, put in forex
-  return 'forex';
-}
-
-// Tab metadata
-const TABS = [
-  { id: 'forex',       label: 'Forex',       icon: '💱' },
-  { id: 'commodities', label: 'Commodities', icon: '🥇' },
-  { id: 'crypto',      label: 'Crypto',      icon: '₿'  },
-  { id: 'indices',     label: 'Indices',     icon: '📊' },
-];
-
-function pairsForTab(tab) {
-  if (!state.latest?.pairs) return [];
-  return state.latest.pairs.filter(p => classifyPair(p.p) === tab);
-}
-
 function tabCounts() {
-  const c = { forex:0, commodities:0, crypto:0, indices:0 };
-  if (!state.latest?.pairs) return c;
-  for (const p of state.latest.pairs) c[classifyPair(p.p)]++;
+  const c = {};
+  for (const t of TABS) c[t.id] = getEntries(state.data[t.asset].latest, t.asset).length;
   return c;
+}
+function hasAnyData() {
+  for (const k of ['pairs','items','coins','inst']) if (state.data[k].latest) return true;
+  return false;
 }
 
 function getSortedPairs() {
-  if (!state.latest?.pairs) return [];
-  // Filter by active tab
-  let p = state.latest.pairs
-    .filter(x => classifyPair(x.p) === state.activeTab)
-    .map((x,i) => ({...x, rank:i+1}));
+  const entries = activeEntries();
+  if (!entries.length) return [];
+  let p = entries.map((x, i) => ({ ...x, rank: i + 1 }));
   if (state.filterFav) p = p.filter(x => state.favorites[x.p]);
-  if (state.sortBy==='name') p.sort((a,b) => state.sortAsc?a.p.localeCompare(b.p):b.p.localeCompare(a.p));
-  else if (state.sortBy==='streak') p.sort((a,b) => { const sa=state.streaks[a.p]||0, sb=state.streaks[b.p]||0; return state.sortAsc?sa-sb:sb-sa; });
-  else p.sort((a,b) => state.sortAsc?Math.abs(a.r)-Math.abs(b.r):Math.abs(b.r)-Math.abs(a.r));
+  const streaks = activeStore().streaks;
+  if (state.sortBy === 'name') p.sort((a,b) => state.sortAsc ? a.p.localeCompare(b.p) : b.p.localeCompare(a.p));
+  else if (state.sortBy === 'streak') p.sort((a,b) => { const sa=streaks[a.p]||0, sb=streaks[b.p]||0; return state.sortAsc?sa-sb:sb-sa; });
+  else p.sort((a,b) => state.sortAsc ? Math.abs(a.r)-Math.abs(b.r) : Math.abs(b.r)-Math.abs(a.r));
   return p.slice(0, state.showN);
 }
+
 function getSortedStreaks() {
-  return Object.entries(state.streaks)
-    .filter(([pair]) => classifyPair(pair) === state.activeTab)
-    .map(([pair,count]) => ({pair,count,roc:state.latest?.pairs?.find(p=>p.p===pair)?.r||0}))
+  const store = activeStore();
+  const ak = TAB_ASSET[state.activeTab];
+  const entries = getEntries(store.latest, ak);
+  return Object.entries(store.streaks)
+    .map(([pair,count]) => ({ pair, count, roc: entries.find(p=>p.p===pair)?.r || 0 }))
     .sort((a,b) => b.count-a.count).slice(0,10);
 }
+
 function getAlerts() {
-  const alerts=[], seen={};
-  for (const snap of state.history.slice(-20).reverse()) {
-    if (!snap.pairs) continue;
-    for (const p of snap.pairs) {
-      if (classifyPair(p.p) !== state.activeTab) continue;
-      const s=state.streaks[p.p]||0;
-      if (s>=state.streakTh && !seen[p.p]) { alerts.push({pair:p.p,roc:p.r,streak:s,t:snap.t}); seen[p.p]=true; }
+  const store = activeStore();
+  const ak = TAB_ASSET[state.activeTab];
+  const alerts = [], seen = {};
+  for (const snap of store.history.slice(-20).reverse()) {
+    const entries = getEntries(snap, ak);
+    for (const p of entries) {
+      const s = store.streaks[p.p] || 0;
+      if (s >= state.streakTh && !seen[p.p]) { alerts.push({ pair:p.p, roc:p.r, streak:s, t:snap.t }); seen[p.p]=true; }
     }
   }
   return alerts.slice(0,10);
 }
-function flashCls(pair,roc) {
-  const prev=state.prevRoc[pair];
-  if (prev===undefined) return '';
-  if (Math.abs(roc)>Math.abs(prev)+0.01) return 'flash-up';
-  if (Math.abs(roc)<Math.abs(prev)-0.01) return 'flash-dn';
+
+function flashCls(pair, roc) {
+  const prev = state.prevRoc[pair];
+  if (prev === undefined) return '';
+  if (Math.abs(roc) > Math.abs(prev) + 0.01) return 'flash-up';
+  if (Math.abs(roc) < Math.abs(prev) - 0.01) return 'flash-dn';
   return '';
 }
 
-// Build sparkline SVG from history for a given pair
 function sparkSVG(pair) {
+  const store = activeStore();
+  const ak = TAB_ASSET[state.activeTab];
   const vals = [];
-  for (const snap of state.history.slice(-12)) {
-    const found = snap.pairs?.find(p => p.p === pair);
+  for (const snap of store.history.slice(-12)) {
+    const found = getEntries(snap, ak).find(p => p.p === pair);
     if (found) vals.push(found.r);
   }
   if (vals.length < 2) return '';
   const w=64, h=28, pad=2;
-  const min=Math.min(...vals), max=Math.max(...vals);
-  const range = max-min || 0.01;
+  const min=Math.min(...vals), max=Math.max(...vals), range=max-min||0.01;
   const pts = vals.map((v,i) => {
     const x = pad + (i/(vals.length-1)) * (w-pad*2);
-    const y = pad + (1 - (v-min)/range) * (h-pad*2);
+    const y = pad + (1-(v-min)/range) * (h-pad*2);
     return `${x},${y}`;
   });
   const last = vals[vals.length-1];
   const col = last >= 0 ? 'var(--bull)' : 'var(--bear)';
-  const colDim = last >= 0 ? 'var(--bull-dim)' : 'var(--bear-dim)';
-  // gradient fill
-  const firstPt = pts[0];
   const lastPt = pts[pts.length-1];
   return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <defs>
-      <linearGradient id="sg_${pair}" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stop-color="${col}" stop-opacity="0.15"/>
-        <stop offset="100%" stop-color="${col}" stop-opacity="0"/>
-      </linearGradient>
-    </defs>
+    <defs><linearGradient id="sg_${pair}" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="${col}" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="${col}" stop-opacity="0"/>
+    </linearGradient></defs>
     <polygon points="${pts.join(' ')} ${w-pad},${h-pad} ${pad},${h-pad}" fill="url(#sg_${pair})" />
     <polyline points="${pts.join(' ')}" stroke="${col}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.8"/>
     <circle cx="${lastPt.split(',')[0]}" cy="${lastPt.split(',')[1]}" r="2" fill="${col}"/>
   </svg>`;
 }
 
-// Summary stats
 function getSummary() {
-  if (!state.latest?.pairs?.length) return null;
-  const pairs = state.latest.pairs.filter(p => classifyPair(p.p) === state.activeTab);
-  if (!pairs.length) return null;
-  const bulls = pairs.filter(p => p.r > 0).length;
-  const strongest = [...pairs].sort((a,b) => Math.abs(b.r)-Math.abs(a.r))[0];
-  const avgMom = pairs.reduce((s,p) => s+Math.abs(p.r), 0) / pairs.length;
-  const activeStreaks = Object.entries(state.streaks)
-    .filter(([k]) => classifyPair(k) === state.activeTab)
-    .filter(([,v]) => v >= state.streakTh).length;
-  return { total: pairs.length, bulls, bears: pairs.length-bulls, strongest, avgMom, activeStreaks };
+  const entries = activeEntries();
+  if (!entries.length) return null;
+  const store = activeStore();
+  const bulls = entries.filter(p => p.r > 0).length;
+  const strongest = [...entries].sort((a,b) => Math.abs(b.r)-Math.abs(a.r))[0];
+  const avgMom = entries.reduce((s,p) => s+Math.abs(p.r), 0) / entries.length;
+  const activeStreaks = Object.values(store.streaks).filter(s => s >= state.streakTh).length;
+  return { total: entries.length, bulls, bears: entries.length-bulls, strongest, avgMom, activeStreaks };
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -1064,7 +1071,7 @@ function renderLogin() {
           <div class="login-logomark">FM</div>
           <div class="login-wordmark">Flow Monitor</div>
         </div>
-        <div class="login-sub">Real-time currency strength analytics</div>
+        <div class="login-sub">Real-time multi-asset momentum analytics</div>
         <div class="login-field">
           <label class="login-label">Access Token</label>
           <input class="login-input" id="token-input" type="text" placeholder="xxxx-xxxx-xxxx"
@@ -1080,12 +1087,13 @@ function renderLogin() {
 }
 
 function renderShell() {
+  const tabLabel = TABS.find(t => t.id === state.activeTab)?.label || 'Forex';
   document.getElementById('root').innerHTML = `
     <div class="app" id="app-shell">
       <header class="header">
         <div class="header-left">
           <div class="logomark">FM</div>
-          <div class="header-text"><h1>Flow Monitor <span id="header-ctx">· Forex</span></h1></div>
+          <div class="header-text"><h1>Flow Monitor <span id="header-ctx">· ${tabLabel}</span></h1></div>
         </div>
         <div class="header-right">
           <div class="badge"><div id="live-dot" class="live-dot off"></div><span id="live-txt">Offline</span></div>
@@ -1170,47 +1178,29 @@ function updateDashboard() {
   const lt = document.getElementById('live-txt');
   if (ld) ld.className = `live-dot ${state.online?'':'off'}`;
   if (lt) lt.textContent = state.online?'Live':'Offline';
-  const fp = document.getElementById('fav-pill');
-  if (fp) fp.classList.toggle('active', state.filterFav);
-  ['roc','name','streak'].forEach(k => {
-    const b = document.getElementById('s-'+k);
-    if (b) b.classList.toggle('active', state.sortBy===k);
-  });
+  document.getElementById('fav-pill')?.classList.toggle('active', state.filterFav);
+  ['roc','name','streak'].forEach(k => document.getElementById('s-'+k)?.classList.toggle('active', state.sortBy===k));
   const pc = document.getElementById('pair-ct');
-  if (pc) pc.textContent = state.latest ? pairs.length+' pairs' : '—';
+  if (pc) pc.textContent = activeEntries().length ? pairs.length+' pairs' : '—';
   const thl = document.getElementById('th-label');
   if (thl) thl.textContent = 'th:'+state.streakTh;
 
-  // Tab counts
+  // Tab counts + header context
   const counts = tabCounts();
-  for (const t of TABS) {
-    const el = document.getElementById('tc-'+t.id);
-    if (el) el.textContent = counts[t.id];
-  }
-  // Header context
+  for (const t of TABS) { const el = document.getElementById('tc-'+t.id); if (el) el.textContent = counts[t.id]; }
   const ctx = document.getElementById('header-ctx');
   const meta = TABS.find(t => t.id === state.activeTab);
   if (ctx && meta) ctx.textContent = '· ' + meta.label;
 
-  // Summary bar
   renderSummary();
-
-  // Table
   renderTable(pairs);
-
-  // Streaks
   renderStreaks(streaks, maxSk);
-
-  // Alerts
   renderAlerts(alerts);
 
-  // Footer
   const cf = document.getElementById('card-foot');
-  if (cf) {
-    cf.innerHTML = state.lastFetch
-      ? `📡 ${fmtDT(state.lastFetch)} WIB <span style="margin-left:4px;opacity:0.5">· ${ago(state.lastFetch)}</span>`
-      : '📡 Waiting for data...';
-  }
+  if (cf) cf.innerHTML = state.lastFetch
+    ? `📡 ${fmtDT(state.lastFetch)} WIB <span style="margin-left:4px;opacity:0.5">· ${ago(state.lastFetch)}</span>`
+    : '📡 Waiting for data...';
 }
 
 function renderSummary() {
@@ -1218,24 +1208,20 @@ function renderSummary() {
   if (!el) return;
   const s = getSummary();
   if (!s) {
-    el.innerHTML = [1,2,3,4].map(() => `
-      <div class="summary-card">
-        <div class="skeleton-box" style="width:60px;height:10px;margin-bottom:8px"></div>
-        <div class="skeleton-box" style="width:48px;height:22px"></div>
-      </div>`).join('');
+    el.innerHTML = [1,2,3,4].map(() => `<div class="summary-card">
+      <div class="skeleton-box" style="width:60px;height:10px;margin-bottom:8px"></div>
+      <div class="skeleton-box" style="width:48px;height:22px"></div></div>`).join('');
     return;
   }
   el.innerHTML = `
     <div class="summary-card fin fin-1">
       <div class="summary-label">Pairs tracked</div>
       <div class="summary-value">${s.total}</div>
-      <div class="summary-sub" style="color:var(--bull)">${s.bulls} bull</span> · <span style="color:var(--bear)">${s.bears} bear</span></div>
+      <div class="summary-sub"><span style="color:var(--bull)">${s.bulls} bull</span> · <span style="color:var(--bear)">${s.bears} bear</span></div>
     </div>
     <div class="summary-card fin fin-1">
       <div class="summary-label">Strongest</div>
-      <div class="summary-value" style="color:${s.strongest.r>0?'var(--bull)':'var(--bear)'}">
-        ${s.strongest.r>0?'+':''}${s.strongest.r.toFixed(2)}%
-      </div>
+      <div class="summary-value" style="color:${s.strongest.r>0?'var(--bull)':'var(--bear)'}">${s.strongest.r>0?'+':''}${s.strongest.r.toFixed(2)}%</div>
       <div class="summary-sub">${s.strongest.p}</div>
     </div>
     <div class="summary-card fin fin-2">
@@ -1252,28 +1238,22 @@ function renderSummary() {
 function renderTable(pairs) {
   const el = document.getElementById('table-body');
   if (!el) return;
-  if (!state.latest) {
-    el.innerHTML = Array(6).fill(0).map(() => `
-      <div class="skeleton-row">
-        <div class="skeleton-box" style="width:26px;height:26px;border-radius:6px"></div>
-        <div class="skeleton-box" style="width:72px;height:14px;flex-shrink:0"></div>
-        <div style="flex:1"></div>
-        <div class="skeleton-box" style="width:56px;height:14px"></div>
-        <div class="skeleton-box" style="width:64px;height:24px;border-radius:4px"></div>
-        <div class="skeleton-box" style="width:32px;height:14px"></div>
-      </div>`).join('');
+  if (!hasAnyData()) {
+    el.innerHTML = Array(6).fill(0).map(() => `<div class="skeleton-row">
+      <div class="skeleton-box" style="width:26px;height:26px;border-radius:6px"></div>
+      <div class="skeleton-box" style="width:72px;height:14px;flex-shrink:0"></div>
+      <div style="flex:1"></div>
+      <div class="skeleton-box" style="width:56px;height:14px"></div>
+      <div class="skeleton-box" style="width:64px;height:24px;border-radius:4px"></div>
+      <div class="skeleton-box" style="width:32px;height:14px"></div></div>`).join('');
     return;
   }
   if (!pairs.length) {
-    const tabMeta = TABS.find(t => t.id === state.activeTab);
-    const tabLabel = tabMeta ? tabMeta.label : state.activeTab;
-    const hasAnyData = state.latest?.pairs?.length > 0;
-    const emptyMsg = hasAnyData
-      ? `No ${tabLabel} pairs in current data — add them to your Pine Script indicator`
-      : 'No data — waiting for Pine Script push';
-    el.innerHTML = `<div class="empty"><div class="empty-icon">${hasAnyData ? '🔍' : '📡'}</div>${emptyMsg}</div>`;
+    const tl = TABS.find(t => t.id === state.activeTab)?.label || state.activeTab;
+    el.innerHTML = `<div class="empty"><div class="empty-icon">🔍</div>No ${tl} data yet — add ${tl.toLowerCase()} symbols to your Pine Script indicator</div>`;
     return;
   }
+  const streaks = activeStore().streaks;
   el.innerHTML = `<table class="fm-table"><thead><tr>
     <th style="width:38px">#</th>
     <th onclick="setSort('name')" class="${state.sortBy==='name'?'sorted':''}">Pair${sortArrow('name')}</th>
@@ -1282,17 +1262,10 @@ function renderTable(pairs) {
     <th style="width:36px"></th>
     <th onclick="setSort('streak')" class="${state.sortBy==='streak'?'sorted':''}" style="text-align:right">Streak${sortArrow('streak')}</th>
   </tr></thead><tbody>${pairs.map(p => {
-    const bull = p.r>0;
-    const sk = state.streaks[p.p]||0;
-    const isFav = state.favorites[p.p];
-    const hit = sk>=state.streakTh;
-    const fl = flashCls(p.p, p.r);
+    const bull=p.r>0, sk=streaks[p.p]||0, isFav=state.favorites[p.p], hit=sk>=state.streakTh, fl=flashCls(p.p,p.r);
     return `<tr>
       <td><span class="rank-chip ${rankCls(p.rank)}">${p.rank}</span></td>
-      <td><div class="pair-cell">
-        <button class="fav-btn ${isFav?'is-fav':''}" onclick="togglePairFav('${p.p}')">${isFav?'★':'☆'}</button>
-        <span class="pair-label">${p.p}</span>
-      </div></td>
+      <td><div class="pair-cell"><button class="fav-btn ${isFav?'is-fav':''}" onclick="togglePairFav('${p.p}')">${isFav?'★':'☆'}</button><span class="pair-label">${p.p}</span></div></td>
       <td><div class="spark-wrap">${sparkSVG(p.p)}</div></td>
       <td style="text-align:right"><span class="roc ${bull?'bull':'bear'} ${fl}">${bull?'+':''}${p.r.toFixed(2)}%</span></td>
       <td><span class="dir-chip ${bull?'bull':'bear'}">${bull?'▲':'▼'}</span></td>
@@ -1306,9 +1279,7 @@ function renderStreaks(list, max) {
   if (!el) return;
   if (!list.length) { el.innerHTML = `<div class="empty"><div class="empty-icon">⏳</div>No active streaks</div>`; return; }
   el.innerHTML = list.map(s => {
-    const bull = s.roc>0;
-    const pct = Math.min((s.count/max)*100, 100);
-    const hit = s.count>=state.streakTh;
+    const bull=s.roc>0, pct=Math.min((s.count/max)*100,100), hit=s.count>=state.streakTh;
     return `<div class="sk-row">
       <div class="sk-pair" style="color:${bull?'var(--bull)':'var(--bear)'}">${s.pair}</div>
       <div class="sk-bar-bg"><div class="sk-bar ${bull?'bull':'bear'}" style="width:${pct}%"></div></div>
@@ -1322,14 +1293,12 @@ function renderAlerts(alerts) {
   if (!el) return;
   if (!alerts.length) { el.innerHTML = `<div class="empty"><div class="empty-icon">🔔</div>No alerts yet</div>`; return; }
   el.innerHTML = alerts.map(a => {
-    const bull = a.roc>0;
+    const bull=a.roc>0;
     return `<div class="tl-row">
       <div class="tl-ts">${fmtTime(a.t)}</div>
       <div class="tl-dot ${bull?'bull':'bear'}"></div>
       <div class="tl-body">
-        <div class="tl-pair" style="color:${bull?'var(--bull)':'var(--bear)'}">
-          ${bull?'▲':'▼'} ${a.pair}
-        </div>
+        <div class="tl-pair" style="color:${bull?'var(--bull)':'var(--bear)'}">${bull?'▲':'▼'} ${a.pair}</div>
         <div class="tl-detail">${a.streak}× streak · ${bull?'+':''}${a.roc.toFixed(2)}%</div>
       </div>
     </div>`;
@@ -1342,39 +1311,22 @@ function renderAlerts(alerts) {
 function setTab(tab) {
   state.activeTab = tab;
   localStorage.setItem('fm_tab', tab);
-  // Update tab buttons
-  document.querySelectorAll('.tab-btn').forEach(btn => {
-    btn.classList.toggle('active', btn.getAttribute('data-tab') === tab);
-  });
-  // Update header context
-  const ctx = document.getElementById('header-ctx');
-  const meta = TABS.find(t => t.id === tab);
-  if (ctx && meta) ctx.textContent = '· ' + meta.label;
+  const entries = activeEntries();
+  const p = {}; for (const x of entries) p[x.p] = x.r;
+  state.prevRoc = p;
+  document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.toggle('active', btn.getAttribute('data-tab')===tab));
   updateDashboard();
 }
 
-function setTheme(t) {
-  state.theme = t;
-  localStorage.setItem('fm_theme', t);
-  applyTheme();
-  syncThemeToggle();
-}
-function applyTheme() {
-  document.documentElement.setAttribute('data-theme', state.theme);
-}
+function setTheme(t) { state.theme=t; localStorage.setItem('fm_theme',t); applyTheme(); syncThemeToggle(); }
+function applyTheme() { document.documentElement.setAttribute('data-theme', state.theme); }
 function syncThemeToggle() {
   document.querySelectorAll('.theme-toggle').forEach(wrap => {
-    wrap.querySelectorAll('.theme-opt').forEach(btn => {
-      btn.classList.toggle('active', btn.getAttribute('data-theme') === state.theme);
-    });
+    wrap.querySelectorAll('.theme-opt').forEach(btn => btn.classList.toggle('active', btn.getAttribute('data-theme')===state.theme));
   });
 }
 
-function setSort(col) {
-  if (state.sortBy===col) state.sortAsc=!state.sortAsc;
-  else { state.sortBy=col; state.sortAsc=col==='name'; }
-  updateDashboard();
-}
+function setSort(col) { if (state.sortBy===col) state.sortAsc=!state.sortAsc; else { state.sortBy=col; state.sortAsc=col==='name'; } updateDashboard(); }
 function setShowN(v) { state.showN=parseInt(v,10); localStorage.setItem('fm_showN',v); updateDashboard(); }
 function setStreakTh(v) { state.streakTh=parseInt(v,10); localStorage.setItem('fm_th',v); updateDashboard(); }
 function toggleFav() { state.filterFav=!state.filterFav; updateDashboard(); }
@@ -1383,7 +1335,6 @@ function togglePairFav(p) { state.favorites[p]?delete state.favorites[p]:state.f
 // ═══════════════════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════════════════
-// INIT
 applyTheme();
 render();
 checkToken();
